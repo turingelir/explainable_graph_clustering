@@ -1,2 +1,4 @@
-from .comm_model import *
-from .encoder import *
+from .gnn import *
+from .var_bayes import *
+from .mcmc import *
+from .greedy import *
