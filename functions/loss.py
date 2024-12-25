@@ -1,5 +1,13 @@
 """
-    This module contains the loss functions used in the training of the model.
+    This module contains the objective loss and regularization functions used for graph clustering and community detection tasks.
+    Main objective functions to be compared upon are:
+        - Modularity loss
+        - Min-cut loss
+        - SBM likelihood estimation
+        - DC-SBM likelihood estimation
+        ...
+        - Entropy (?)
+        - Energy based approaches (?)
 
 """
 import torch
@@ -63,6 +71,9 @@ def modularity_loss(init_adj: Tensor, new_adj: Tensor, assign_mat: Tensor, reduc
     else:
         raise ValueError(f"Invalid reduction method: {reduction}. Expected 'mean', 'sum', or 'none'.")
 
+def min_cut_loss(init_adj: Tensor, new_adj: Tensor, assign_mat: Tensor, reduction: str = 'mean') -> Tensor:
+    return NotImplementedError
+
 def clustering_regularization(assign_mat: Tensor, reduction: str = 'mean') -> Tuple[Tensor, Tensor]:
     r"""
         Compute clustering regularization losses called in one function for the community assignment matrix.
@@ -78,7 +89,6 @@ def clustering_regularization(assign_mat: Tensor, reduction: str = 'mean') -> Tu
     o_loss = orthogonality_loss(assign_mat, ss=ss) # Orthogonality loss
     c_loss = collapse_loss(assign_mat, ss=ss, ) # Collapse 
     return o_loss, c_loss
-
 
 def orthogonality_loss(assign_mat: Tensor, ss: Tensor = None, reduction: str = 'mean') -> Tensor:
     r"""
@@ -109,7 +119,6 @@ def orthogonality_loss(assign_mat: Tensor, ss: Tensor = None, reduction: str = '
         return ortho_loss
     else:
         raise ValueError(f"Invalid reduction method: {reduction}. Expected 'mean', 'sum', or 'none'.")
-
 
 def collapse_loss(assign_mat: Tensor, ss: Tensor = None, reduction: str = 'mean') -> Tensor:
     r"""
