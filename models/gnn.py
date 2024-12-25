@@ -1,20 +1,10 @@
+"""
+    --- Graph Neural Network (GNN) Encoder ---
+    Graph community encoder uses graph embeddings output from an graph encoder to estimate community memberships of nodes.
+"""
 
 from typing import Union, List, Optional
 
-from torch import Tensor
-from torch.nn import Module
-import torch_geometric.nn as pyg_nn
-
-"""
-    Graph community encoder uses graph embeddings output from an graph encoder to estimate community memberships of nodes.
-"""
-"""
-    TODO:
-        - Args and return types for all functions
-        ~ Base class for encoding graphs
-        - Class for hierarchical graph encoder (node-level and community-level encoding)
-        - Class for oracle hierarchical graph encoder (community memberships are provided by an oracle)
-"""
 import gc
 from functools import partial
 
