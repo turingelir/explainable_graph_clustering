@@ -36,7 +36,7 @@ def modularity_loss(init_adj: Tensor, new_adj: Tensor, assign_mat: Tensor, reduc
             :return loss: (Tensor) The mean modularity loss across the batch.
     """
     assert init_adj.dim() in [3, 4], f"Expected input to have 3 or 4 dimensions, got {init_adj.dim()}"
-    assert init_adj.shape[-1] == new_adj.shape[-1], (f"Expected input and target to have last dimension "
+    assert init_adj.dim() != 4 or init_adj.shape[-1] == new_adj.shape[-1], (f"Expected input and target to have last dimension "
                                                      f"equal, got {init_adj.shape[-1]} and {new_adj.shape[-1]}")
     assert assign_mat.dim() == 3, f"Expected community assignment to have 3 dimensions, got {assign_mat.dim()}"
     assert init_adj.shape[-2] == assign_mat.shape[-2], (
@@ -62,7 +62,9 @@ def modularity_loss(init_adj: Tensor, new_adj: Tensor, assign_mat: Tensor, reduc
     decompose = new_adj - normalizer
     spectral_loss = -torch.einsum('...ii', decompose) / 2 / m  # [B, L]
 
-    if reduction == 'mean':    # Mean loss across the batch and graph-layers
+    spectral_loss = torch.mean(spectral_loss, dim=-1)  # Mean loss across the graph-layers
+
+    if reduction == 'mean':    # Mean loss across the batch
         return torch.mean(spectral_loss)
     elif reduction == 'sum':
         return torch.sum(spectral_loss)
@@ -156,7 +158,14 @@ if __name__ == "__main__":
     # Run some tests
 
     # Sample some tensors
-    cbt = torch.rand((1, 36, 36))  # Adjacency tensor -> [B, N, N]
-    adj_1 = torch.rand((1, 20, 36, 36, 6))  # New adjacency tensor -> [B, K, C, C, L]
-    adj_2 = adj_1.squeeze()  # torch.rand((20, 36, 36, 6))  # New adjacency tensor -> [S, N, N, L]
-    weights = torch.rand(6)
+    B, N, C = 16, 100, 10
+    init_adj = torch.rand(B, N, N)
+    new_adj = torch.rand(B, C, C)
+    assign_mat = torch.rand(B, N, C)
+
+    # Test modularity loss
+    loss = modularity_loss(init_adj, new_adj, assign_mat, reduction='mean')
+    print(f"Modularity loss: {loss}")
+
+    loss_not_reduced = modularity_loss(init_adj, new_adj, assign_mat, reduction='none')
+    print(f"Modularity loss (not reduced): {loss_not_reduced}")
