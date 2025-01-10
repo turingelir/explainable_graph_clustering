@@ -4,8 +4,17 @@
     According to loss/likelihood functions, iterative algorithms are used to optimize the objective function.
     For example: Louvain algorithm is a popular greedy algorithm for community detection.
 """
+import sys
+import os
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 import random
 import torch
+
+from graspologic.simulations import sbm
+from graspologic.plot import heatmap
+
+from functions import modularity_loss, cluster_graph
 
 # Optimizer class
 # Objective function will be taken as input
@@ -47,7 +56,8 @@ class GreedyOptimizer:
         # Iterative optimization
         # Move nodes between clusters until no further improvement can be made
         # FIXME: FOR DEBUGGING PURPOSES
-        j = 0
+        # j = 0
+        rounds = 10
         while True:
             # Order of nodes to move between clusters
             order = list(range(graph.size(1))) # [0, 1, 2, ..., n]
@@ -55,15 +65,19 @@ class GreedyOptimizer:
                 random.seed(self.seed)
                 random.shuffle(order)
             # Iterate over the nodes
+            any_move = False
             for i in order:
                 # FIXME: FOR DEBUGGING PURPOSES
-                print(f"Node step: {i+j*graph.size(1)}")
+                # print(f"Node step: {i+j*graph.size(1)}")
+                rounds += 1
                 # Get the best move for a node to switch clusters
                 move = self.get_best_move(graph, partition, i)
                 # If a move is possible
                 if move is not None:
+                    # A move was made for a node
+                    any_move = True
                     # Move the node by updating the partition
-                    partition = self.move_node(partition, move)
+                    partition = self.move_node(partition, move, i)
                     # Evaluate the new partition
                     score = self.objective_function(graph, partition)
                     # If the new partition is better than the current best partition
@@ -78,11 +92,13 @@ class GreedyOptimizer:
                         # Failure of best move method is not expected
                         raise Exception("I WAS WRONG. Best move method did NOT return a better move.")
                 else:
-                    # If no move is possible, break the loop
-                    break
+                    # If no move is possible, continue to the next node
+                    # As the node is already in the best cluster
+                    continue
             # If no move is possible, break the loop
-            if move is None:
+            if not any_move:
                 break
+        print(f"Number of iterations: {rounds}")
         return self.best_partition
     
     def get_best_move(self, graph:torch.Tensor, partition:torch.Tensor, node:int)->torch.Tensor:
@@ -120,7 +136,7 @@ class GreedyOptimizer:
         # Iterate over the clusters
         for i in order:
             # FIXME: FOR DEBUGGING PURPOSES
-            print(f"Cluster step: {i}")
+            # print(f"Cluster step: {i}")
             # If the node is already in the cluster, skip
             if torch.all(current_cluster[:, i] == 1):
                 continue
@@ -175,25 +191,62 @@ class GreedyOptimizer:
 if __name__ == '__main__':
     # Test the greedy optimizer
     # Define a simple objective function
-    def simple_objective(graph, partition):
-        return torch.sum(graph @ partition, dim=(1, 2))
+    def modularity(graph, partition):
+        r"""
+            Modularity loss function for graph clustering.
+            Args:
+                :param graph: (Tensor) The graph adjacency matrix.
+                        Shape is [B, N, N] where N is the number of nodes, and B is the batch size.
+                :param partition: (Tensor) The current partition of the nodes.
+                        Shape is [B, N, C] where C is the number of clusters, and B is the batch size.
+            Returns:
+                :return loss: (Tensor) The modularity value of the partition.
+                        Shape is [B] where B is the batch size.
+        """
+        # Modularity loss from functions/loss.py
+        # Requires aggregation of the adjacency matrix using the partition
+        new_adj = torch.einsum('...ij,...jk->...ik', torch.einsum('...ij,...ik->...jk', partition, graph), partition) # [B, C, C]
+        return modularity_loss(graph, new_adj, partition, reduction='mean')
     
-    # Define a simple graph and partition
-    b, n, c = 1, 100, 3
-    graph = torch.bernoulli(torch.zeros((b, n, n)).uniform_(0, 1))
-    graph[:, torch.eye(n).bool()] = 0
-    partition = torch.randint(0, c, (b, n))
-    partition = torch.nn.functional.one_hot(partition, num_classes=c).float()
+    ## Create example graph and partition
+    # batch, number_of_nodes, number_of_clusters
+    b, n_nodes, n_clusters = 1, 100, 3
+    
+    # Create graphs from a stochastic block model
+    n = [n_nodes, n_nodes, n_nodes]
+    p = [[0.9, 0.1, 0.1], [0.1, 0.9, 0.1], [0.1, 0.1, 0.9]]
+
+    graph, community_memberships = sbm(n=n, p=p, loops=False, return_labels=True)
+    # Randomize the memberships order
+    community_memberships = torch.tensor(community_memberships).unsqueeze(0)
+    community_memberships_p = community_memberships[:,torch.randperm(sum(n))]
+
+    # Convert to one-hot encoding
+    partition = torch.functional.F.one_hot(community_memberships_p, num_classes=n_clusters).float()
+
+    # Display the graph
+    heatmap(graph.squeeze(), title="Graph w/ 3 Clusters")
+    graph = torch.tensor(graph, dtype=torch.float32).unsqueeze(0)
+
+    # Test modularity loss
+    print('Initial modularity: {}'.format(modularity(graph, partition)))
     
     # Initialize the greedy optimizer
-    optimizer = GreedyOptimizer(simple_objective)
+    optimizer = GreedyOptimizer(modularity)
     
     # Optimize the partition
     best_partition = optimizer.optimize(graph, partition)
+
+    # Print the best partition modularity
+    print('Best modularity: {}'.format(optimizer.get_best_score()))
+
+    # Evaluate the best partition with actual community memberships
+    y = community_memberships
+    y_hat = torch.argmax(best_partition, dim=-1)
+    # Calculate the accuracy using clustering metric
+    # (found clusters may be correct but in different order, thus seemingly incorrect)
     
-    # Print the best partition
-    # print(best_partition)
-    
-    # Print the best score
-    print(optimizer.get_best_score())
+
+    # Display the best partition
+    print(y_hat)
     
