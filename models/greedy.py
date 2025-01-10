@@ -14,7 +14,7 @@ import torch
 from graspologic.simulations import sbm
 from graspologic.plot import heatmap
 
-from functions import modularity_loss, cluster_graph
+from functions import modularity_loss, cluster_graph, v_measure_score
 
 # Optimizer class
 # Objective function will be taken as input
@@ -26,7 +26,7 @@ from functions import modularity_loss, cluster_graph
 # Graphs are represented as adjacency matrices [n x n] where n is the number of nodes
 # Clusters are represented as one-hot encoded vectors [n x c] where c is the number of clusters
 class GreedyOptimizer:
-    def __init__(self, objective_function, random_order=False, seed=None, obj='max'):
+    def __init__(self, objective_function, random_order=False, seed=0, obj='max'):
         self.objective_function = objective_function
 
         self.best_partition = None
@@ -81,7 +81,7 @@ class GreedyOptimizer:
                     # Evaluate the new partition
                     score = self.objective_function(graph, partition)
                     # If the new partition is better than the current best partition
-                    if self.gain(score, self.best_score):
+                    if self.gain(self.best_score, score):
                         # Update the best partition and score
                         self.best_partition = partition
                         self.best_score = score
@@ -149,7 +149,7 @@ class GreedyOptimizer:
             # Evaluate the new partition
             new_score = self.objective_function(graph, new_partition)
             # For batches where the new score is better
-            mask = self.gain(new_score, best_score)
+            mask = self.gain(best_score, new_score)
 
             # Update the best move and the best score
             best_move = torch.where(mask.unsqueeze(-1), new_partition[:, node], best_move)
@@ -205,8 +205,7 @@ if __name__ == '__main__':
         """
         # Modularity loss from functions/loss.py
         # Requires aggregation of the adjacency matrix using the partition
-        new_adj = torch.einsum('...ij,...jk->...ik', torch.einsum('...ij,...ik->...jk', partition, graph), partition) # [B, C, C]
-        return modularity_loss(graph, new_adj, partition, reduction='mean')
+        return - modularity_loss(graph, partition, reduction='mean')
     
     ## Create example graph and partition
     # batch, number_of_nodes, number_of_clusters
@@ -214,7 +213,14 @@ if __name__ == '__main__':
     
     # Create graphs from a stochastic block model
     n = [n_nodes, n_nodes, n_nodes]
-    p = [[0.9, 0.1, 0.1], [0.1, 0.9, 0.1], [0.1, 0.1, 0.9]]
+    p = [[0.6, 0.2, 0.3], 
+         [0.2, 0.65, 0.2],
+         [0.3, 0.2, 0.7]]
+
+    # Print out the graph and community memberships
+    print('Graph # of nodes and p values per community:')
+    print('n:', n)
+    print('p:', p)
 
     graph, community_memberships = sbm(n=n, p=p, loops=False, return_labels=True)
     # Randomize the memberships order
@@ -222,7 +228,7 @@ if __name__ == '__main__':
     community_memberships_p = community_memberships[:,torch.randperm(sum(n))]
 
     # Convert to one-hot encoding
-    partition = torch.functional.F.one_hot(community_memberships_p, num_classes=n_clusters).float()
+    partition = torch.functional.F.one_hot(community_memberships, num_classes=n_clusters).float()
 
     # Display the graph
     heatmap(graph.squeeze(), title="Graph w/ 3 Clusters")
@@ -232,7 +238,7 @@ if __name__ == '__main__':
     print('Initial modularity: {}'.format(modularity(graph, partition)))
     
     # Initialize the greedy optimizer
-    optimizer = GreedyOptimizer(modularity)
+    optimizer = GreedyOptimizer(modularity, random_order=True, seed=571, obj='max')
     
     # Optimize the partition
     best_partition = optimizer.optimize(graph, partition)
@@ -245,7 +251,7 @@ if __name__ == '__main__':
     y_hat = torch.argmax(best_partition, dim=-1)
     # Calculate the accuracy using clustering metric
     # (found clusters may be correct but in different order, thus seemingly incorrect)
-    
+    print('V-measure score: {}'.format(v_measure_score(y, y_hat)))
 
     # Display the best partition
     print(y_hat)
