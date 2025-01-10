@@ -37,14 +37,14 @@ def cluster_graph(x: Tensor, adj: Tensor, s: Tensor) -> Union[Tensor, Tensor]:
     assert x.size(0) == adj.size(0) == s.size(0), "Batch size mismatch."
     assert x.size(1) == adj.size(1) == s.size(1), "Node size mismatch."
     if adj.dim() == 3:
-        adj = adj.unsqueeze(-1)  # [B, C, C, 1]
-    adj = adj.permute(-4, -1, -3, -2)  # [B, L, C, C]
+        adj = adj.unsqueeze(-1)  # [B, N, N, 1]
+    adj = adj.permute(-4, -1, -3, -2)  # [B, L, N, N]
     # TODO: handle dimensions for matmul
     # Cluster node features (S^T * X)
     x_clustered = torch.matmul(s.transpose(1, 2), x)
     # Cluster adjacency matrix (S^T * A * S)
     s = s.unsqueeze(-3)  # [B, 1, N, C]
-    adj_clustered = torch.einsum('...ij,...jk->...ik', torch.einsum('...ij,...ik->...jk', s, adj), s)
+    adj_clustered = torch.einsum('...ij,...jk->...ik', torch.einsum('...ij,...ik->...jk', s, adj), s) # [B, L, C, C]
     adj_clustered = adj_clustered.permute(-4, -2, -1, -3)  # [B, C, C, L]
     if adj_clustered.size(-1) == 1:
         adj_clustered = adj_clustered.squeeze(-1)
