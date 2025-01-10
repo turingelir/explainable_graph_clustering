@@ -71,7 +71,7 @@ def modularity_loss(init_adj: Tensor, assign_mat: Tensor, new_adj: Tensor = None
     cb = torch.einsum('bij,bjk->bik', node_strength, assign_mat).unsqueeze(-2)  # [B, L, 1, C]
 
     normalizer = torch.einsum('...ij,...jk->...ik', ca, cb) / 2 / m.view(m.shape + (1, 1))  # [B, L, C, C]
-    decompose = new_adj - normalizer
+    decompose = new_adj - normalizer * gamma  # [B, L, C, C]
     spectral_loss = -torch.einsum('...ii', decompose) / 2 / m  # [B, L]
 
     spectral_loss = torch.mean(spectral_loss, dim=-1)  # Mean loss across the graph-layers
