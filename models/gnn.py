@@ -9,151 +9,157 @@ import gc
 from functools import partial
 
 import torch
-import torch_geometric.nn as pyg_nn
 from torch import Tensor
 from torch.nn import Sequential, Linear, ReLU, Module, functional as F, ModuleList, Softmax, ModuleList
-from torch_geometric.typing import Adj
 
-# Base class for graph nn encoder
-class GraphEncoder(Module):
-    r""" A graph neural network encoder that encodes graph data into node embeddings."""
-
-    def __init__(self, input_dim: int, hidden_dim: int, output_dim: int, num_layers: int, edge_feat_dim: int,
-                 gnn_type: str, norm_type: str, act_type: str, enc_concat: bool = False,
-                 dropout: float = 0.0):
-        super(GraphEncoder, self).__init__()
-
-        assert gnn_type in ['GCNConv', 'GATConv', 'SAGEConv', 'GraphConv', 'NNConv']
-        assert norm_type in ['BatchNorm', 'LayerNorm', 'GraphNorm', None]
-        assert act_type in ['selu', 'relu', 'leaky_relu', None]
-
-        self.gnn = getattr(pyg_nn, gnn_type)
-        self.norm = getattr(pyg_nn, norm_type) if norm_type != None else None
-        self.act = partial(getattr(F, act_type), inplace=True) if act_type != None else lambda x: x
-
-        self.norm_transfer_args = "x -> x" if norm_type == 'BatchNorm' else "x, batch -> x"
-
-        assert num_layers > 0
-        assert input_dim > 0
-        assert output_dim > 0
-        assert hidden_dim > 0
-
-        self.edge_feat_dim = edge_feat_dim
-        self.input_dim = input_dim
-        self.output_dim = output_dim
-        self.hidden_dim = hidden_dim
-        self.num_layers = num_layers
-        self.dropout = dropout
-
-        # Concatenate embeddings from all layers
-        self.enc_concat = enc_concat
-
-        # Build graph convolutional blocks
-        self.conv_blocks = self.build_blocks()
-
-    def build_seq_conv_layers(self):
-        # Build a sequence of graph convolutional layers
-        # Each layer is followed by an activation function and a normalization layer
-        conv_layers = ModuleList()
-        for i in range(self.num_layers):
-            input_dim = self.input_dim if i == 0 else self.hidden_dim
-            output_dim = self.output_dim if i == self.num_layers - 1 else self.hidden_dim
-            conv_layers.append((self.gnn(input_dim, output_dim, droput=self.dropout),
-                                "x, edge_index, edge_attr -> x"))
-            if i < self.num_layers - 1 and self.norm != None:
-                conv_layers.append((self.norm(output_dim), self.norm_transfer_args))
-            conv_layers.append(self.act)
-        return conv_layers
-
-    def build_seq_nnconv_layers(self):
-        # Build a sequence of neural network convolutional layers
-        # Each layer is followed by an activation function and a normalization layer
-        conv_layers = ModuleList()
-        for i in range(self.num_layers):
-            input_dim = self.input_dim if i == 0 else self.hidden_dim
-            output_dim = self.output_dim if i == self.num_layers - 1 else self.hidden_dim
-            nn = Sequential(Linear(self.edge_feat_dim, input_dim * output_dim), ReLU(inplace=True))
-            conv_layers.append((self.gnn(input_dim, output_dim, nn=nn, aggr='mean'),
-                                "x, edge_index, edge_attr -> x"))
-            if i < self.num_layers - 1 and self.norm != None:
-                conv_layers.append((self.norm(output_dim), self.norm_transfer_args))
-            conv_layers.append(self.act)
-        return conv_layers
-
-    def build_blocks(self):
-        # Build a sequence of graph convolutional layers
-        # Each layer is followed by an activation function and a normalization layer
-        blocks = ModuleList()
-        for i in range(self.num_layers):
-            layers = []
-            input_dim = self.input_dim if i == 0 else self.hidden_dim
-            output_dim = self.output_dim if i == self.num_layers - 1 else self.hidden_dim
-            if self.gnn.__name__ == 'NNConv':
-                nn = Sequential(Linear(self.edge_feat_dim, input_dim * output_dim), ReLU(inplace=True))
-                layers.append((self.gnn(input_dim, output_dim, nn=nn, aggr='mean'),
-                                "x, edge_index, edge_attr -> x"))
-            else:
-                layers.append((self.gnn(input_dim, output_dim, droput=self.dropout),
-                               "x, edge_index, edge_attr -> x"))
-            if i < self.num_layers - 1 and self.norm != None:
-                layers.append((self.norm(output_dim), self.norm_transfer_args))
-            layers.append(self.act)
-            blocks.append(pyg_nn.Sequential("x, edge_index, edge_attr, batch", layers))
-        return blocks
-
-    # TODO: Implement block-wise graph encoder like in Dual-HINet that concatenates embeddings
-    def build_conv_blocks(self):
-        r""""""
-        return NotImplementedError
-
-    def forward(self, x: Tensor, edge_index: Adj, edge_attr: Tensor, batch: Tensor) -> Tensor:
-        r"""
-        Forward pass of the graph encoder.
-        :param x: Node features
-                Shape (b*n,f)
-        :param edge_index: Edge index tensor
-                Shape (2, e)
-        :param edge_attr: Edge attribute tensor
-                Shape (e, f)
-        :param batch: Batch tensor
-                Shape (n,)
-        :return: Encoded node embeddings
-                Shape (b*n, d) or (b*n, d*l) or (b*n, d)
-        """
-        z_list = []
-        for layer in self.conv_blocks:
-            x = layer(x, edge_index, edge_attr, batch)
-            z_list.append(x)
-        if self.enc_concat:
-            z = torch.cat(z_list, dim=-1)
-        else:
-            z = z_list[-1]
-        return z  # [B * N, D * L] or [B * N, D]
-
-# Loss function's for
-class GraphCommunityPooling(Module):
-    r""" A graph pooling layer that estimates community memberships of nodes using graph embeddings.
+# Graph Convolutional Network (GCN) encoder
+class GCN(Module):
+    r"""
+        Graph Convolutional Network (GCN) layer.
+        
+        The GCN layer is defined as:
+            Z = act(D^(-1/2) * A * D^(-1/2) * X * W)
+        Args:
+            :param in_features: (int) The number of input features.
+            :param out_features: (int) The number of output features.
+            :param bias: (bool) If set to False, the layer will not learn an additive bias.
+            :param activation: (Module) The activation function to use.
     """
-
-    def __init__(self, channels: Union[int, List[int]], num_communities: int, community_mapping_type: str = 'soft',
-                 dropout: float = 0.0, return_comm_memberships: bool = False):
-        super(GraphCommunityPooling, self).__init__()
-
-        # Channels are used for the MLP layer
-        channels = channels if isinstance(channels, list) else [channels]
-
-        self.mlp = pyg_nn.MLP(channels + [num_communities], batch_norm=False)
-        self.dropout = dropout
-
-        self.community_mapping_type = community_mapping_type if community_mapping_type in ['soft', 'hard'] else 'soft'
-        self.return_comm_memberships = return_comm_memberships
-
+    def __init__(self, in_features: int, out_features: int, bias: bool = True, activation: Optional[Module] = None):
+        super(GCN, self).__init__()
+        self.in_features = in_features
+        self.out_features = out_features
+        self.weight = torch.nn.Parameter(torch.Tensor(in_features, out_features))
+        if bias:
+            self.bias = torch.nn.Parameter(torch.Tensor(out_features))
+        else:
+            self.register_parameter('bias', None)
+        self.act = activation
         self.reset_parameters()
 
     def reset_parameters(self):
-        r"""Resets all learnable parameters of the module."""
-        self.mlp.reset_parameters()
+        torch.nn.init.xavier_uniform_(self.weight)
+        if self.bias is not None:
+            torch.nn.init.zeros_(self.bias)
 
-    def forward(self, x: Tensor, adj: Tensor,
-                mask: Optional[Tensor] = None):
-        pass
+    def forward(self, x: Tensor, adj: Tensor) -> Tensor:
+        r"""
+            Forward pass of the GCN layer.
+            Z = act(D^(-1/2) * A * D^(-1/2) * X * W)
+
+            Args:
+                :param x: (Tensor) The input tensor of shape [B, N, F] where B is the batch size, N is the number of nodes, 
+                        and F is the number of input features.
+                :param adj: (Tensor) The adjacency matrix of the graph of shape [B, N, N] where B is the batch size and 
+                        N is the number of nodes.
+            Returns:
+                :return: (Tensor) The output tensor of shape [B, N, out_features] where out_features is the number of output features.
+        """
+        # Compute the degree matrix
+        degree = torch.sum(adj, dim=-1)
+        # Compute the degree matrix inverse square root
+        degree_inv = torch.pow(degree + 1e-6, -0.5)
+        # Create a diagonal matrix from the degree matrix
+        d = torch.diag_embed(degree_inv)
+
+        # Compute the normalized adjacency matrix
+        adj_norm = torch.matmul(torch.matmul(d, adj), d)
+
+        # Message passing
+        z = torch.matmul(adj_norm, x)
+
+        # Linear transformation
+        z = torch.matmul(z, self.weight)
+
+        # Add bias 
+        if self.bias is not None:
+            z = z + self.bias
+
+        # Activation layer
+        if self.act is not None:
+            z = self.act(z)
+
+        return z
+
+class GNN(Module):
+    r"""
+        Graph Neural Network (GNN) block.
+        For given graph convolutional layers, the GNN block applies the GCN layers in sequence.
+        Batch normalization may be applied before each graph convolution layer.
+        Residual skip connections may be applied to the output of each graph convolution layer.
+        Or skip concatenation connections may be applied to the output of each graph convolution layer.
+
+        Args:
+            :param in_features: (int) The number of input features.
+            :param out_features: (int) The number of output features.
+            :param num_layers: (int) The number of graph convolutional layers.
+            :param bias: (bool) If set to False, the layer will not learn an additive bias.
+            :param activation: (Module) The activation function to use.
+            :param batch_norm: (bool) If set to True, batch normalization will be applied before each graph convolution layer.
+            :param residual: (bool) If set to True, residual skip connections will be applied to the output of each graph convolution layer.
+            :param skip_concat: (bool) If set to True, skip concatenation connections will be applied to the output of each graph convolution layer.
+    """
+    def __init__(self, in_features: int, out_features: int, num_layers: int, bias: bool = True, activation: Optional[Module] = None,
+                 GCN: Module = GCN, batch_norm: bool = False, residual: bool = False, skip_concat: bool = False):
+        super(GNN, self).__init__()
+        # Graph convolutional layer parameters
+        self.in_features = in_features
+        self.out_features = out_features
+        # Number of graph convolutional layers in the block
+        self.num_layers = num_layers
+        # Bias
+        self.bias = bias
+        # Activation function
+        self.activation = activation
+        # Batch normalization
+        self.batch_norm = batch_norm
+        # NOTE: Residual and skip concatenation connections are mutually 
+        assert not (residual and skip_concat), "Residual and skip concatenation connections are mutually exclusive."
+        # Residual skip connections
+        self.residual = residual
+        # Skip concatenation connections
+        self.skip_concat = skip_concat
+        
+
+        # Initialize the graph convolutional layers
+        self.layers = ModuleList()
+        for _ in range(num_layers-1):
+            # Batch normalization
+            if batch_norm:
+                self.layers.append(torch.nn.BatchNorm1d(in_features))
+            # Graph convolutional layer
+            if self.skip_concat:
+                in_features = in_features + out_features
+            self.layers.append(GCN(in_features, out_features, bias, activation))
+
+        # Last graph convolutional layer
+        if batch_norm:
+            self.layers.append(torch.nn.BatchNorm1d(in_features))
+        self.layers.append(GCN(in_features, out_features, bias))
+
+    def forward(self, x: Tensor, adj: Tensor) -> Tensor:
+        r"""
+            Forward pass of the GNN block.
+            Args:
+                :param x: (Tensor) The input tensor of shape [B, N, F] where B is the batch size, N is the number of nodes, 
+                        and F is the number of input features.
+                :param adj: (Tensor) The adjacency matrix of the graph of shape [B, N, N] where B is the batch size and 
+                        N is the number of nodes.
+            Returns:
+                :return: (Tensor) The output tensor of shape [B, N, out_features] where out_features is the number of output features.
+        """
+        # Apply the graph convolutional layers
+        for layer in self.layers:
+            if layer.__class__.__name__ == 'BatchNorm1d':
+                # Apply batch normalization
+                x = layer(x.permute(0, 2, 1)).permute(0, 2, 1) # Permute to [B, F, N] for batch normalization
+            else:
+                z = layer(x, adj)
+                if self.residual:
+                    z = z + x
+                elif self.skip_concat:
+                    z = torch.cat((z, x), dim=-1)
+                x = z
+        return x
+
+
