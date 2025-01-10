@@ -50,6 +50,28 @@ def cluster_graph(x: Tensor, adj: Tensor, s: Tensor) -> Union[Tensor, Tensor]:
         adj_clustered = adj_clustered.squeeze(-1)
     return x_clustered, adj_clustered
 
+def cluster_edges(adj: Tensor, s: Tensor) -> Tensor:
+    r""" Cluster edges function for graph data.
+    Args:
+        :arg adj: Adjacency matrix tensor of shape [B, N, N] or [B, N, N, L].
+        :arg s: Cluster assignment tensor of shape [B, N, C].
+    Returns:
+        :return adj_clustered: Clustered adjacency matrix tensor of shape [B, C, C, L].
+    """
+    assert adj.dim() == 3 or adj.dim() == 4, "Adjacency matrix tensor must be 3 or 4-dimensional."
+    assert s.dim() == 3, "Cluster assignment tensor must be 3-dimensional."
+    assert adj.size(0) == s.size(0), "Batch size mismatch."
+    assert adj.size(1) == s.size(1), "Node size mismatch."
+    if adj.dim() == 3:
+        adj = adj.unsqueeze(-1)  # [B, N, N, 1]
+    adj = adj.permute(-4, -1, -3, -2)  # [B, L, N, N]
+    s = s.unsqueeze(-3)  # [B, 1, N, C]
+    adj_clustered = torch.einsum('...ij,...jk->...ik', torch.einsum('...ij,...ik->...jk', s, adj), s) # [B, L, C, C]
+    adj_clustered = adj_clustered.permute(-4, -2, -1, -3)  # [B, C, C, L]
+    if adj.dim() == 3:
+        adj_clustered = adj_clustered.squeeze(-1)
+    return adj_clustered
+
 def softmax_w_temperature(x: Tensor, dim: int = -1, temperature: float = 1.0) -> Tensor:
     r""" Softmax function with temperature scaling.
     Args:
