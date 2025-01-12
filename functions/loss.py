@@ -18,7 +18,7 @@ import torch
 from torch import Tensor
 from typing import Tuple
 
-from functions import cluster_edges
+from functions import cluster_edges, rank3_trace, rank3_diag
 
 def joint_loss(losses: dict):
     r"""Compute joint loss by summing dict of losses while applying weights."""
@@ -32,17 +32,17 @@ def modularity_loss(init_adj: Tensor, assign_mat: Tensor, new_adj: Tensor = None
             :param init_adj: (Tensor) The initial adjacency matrix of the graph.
                     Shape is [B, N, N, L] or [B, N, N] where B is the batch size, N is the number of nodes, 
                     and L is the number of layers of a multi-graph.
+            :param assign_mat: (Tensor) The community assignment of nodes.
+                    Shape is [B, N, C] where B is the batch size, N is the number of nodes, and C is the number of communities.
             :param new_adj: (Tensor) The new adjacency matrix of the graph after the community assignment of edges.
                     Shape is [B, C, C, L] or [B, C, C] where B is the batch size, C is the number of communities,
                     and L is the number of layers of a multi-graph.
-            :param assign_mat: (Tensor) The community assignment of nodes.
-                    Shape is [B, N, C] where B is the batch size, N is the number of nodes, and C is the number of communities.
             :param gamma: (float) The modularity resolution parameter, i.e. the resolution limit of the modularity.
                     Used for finding smaller communities when gamma > 1, and larger communities when gamma < 1. 
                     When gamma = 1, the modularity loss is the standard modularity.
             :param reduction: (str) The reduction method to use for the modularity loss.
         Returns:
-            :return loss: (Tensor) The mean modularity loss across the batch.
+            :return loss: (Tensor) The modularity loss (negative modularity to be minimized).
     """
     assert init_adj.dim() in [3, 4], f"Expected input to have 3 or 4 dimensions, got {init_adj.dim()}"
     assert assign_mat.dim() == 3, f"Expected community assignment to have 3 dimensions, got {assign_mat.dim()}"
@@ -86,7 +86,54 @@ def modularity_loss(init_adj: Tensor, assign_mat: Tensor, new_adj: Tensor = None
         raise ValueError(f"Invalid reduction method: {reduction}. Expected 'mean', 'sum', or 'none'.")
 
 def min_cut_loss(init_adj: Tensor, assign_mat: Tensor, new_adj: Tensor, reduction: str = 'mean') -> Tensor:
-    return NotImplementedError
+    r"""
+        Calculate the min-cut loss of community memberships for the graph.
+        Implementation taken from: 
+        https://pytorch-geometric.readthedocs.io/en/2.6.1/_modules/torch_geometric/nn/dense/mincut_pool.html#dense_mincut_pool
+        Args:
+            init_adj: (Tensor) The initial adjacency matrix of the graph.
+                    Shape is [B, N, N] where B is the batch size, N is the number of nodes.
+            assign_mat: (Tensor) The community assignment of nodes.
+                    Shape is [B, N, C] where B is the batch size, N is the number of nodes, and C is the number of communities.
+            new_adj: (Tensor) The new adjacency matrix of the graph after the community assignment of edges.
+                    Shape is [B, C, C] where B is the batch size, C is the number of communities,
+                    and L is the number of layers of a graph.
+            reduction: (str) The reduction method to use for the loss.
+        Returns:
+            loss: (Tensor) The min-cut loss.
+    """
+    assert assign_mat.dim() == 3, f"Expected community assignment to have 3 dimensions, got {assign_mat.dim()}"
+    assert init_adj.shape[-2] == assign_mat.shape[-2], (
+        f"Expected input and community assignment to have second-to-last dimension "
+        f"equal, got {init_adj.shape[-2]} and {assign_mat.shape[-2]}")
+    # If community-wise graph is not provided, compute it from the initial adjacency matrix and community assignment
+    if new_adj is None:
+        new_adj = cluster_edges(init_adj, assign_mat) # [B, C, C]
+    assert init_adj.dim() != 4 or init_adj.shape[-1] == new_adj.shape[-1], (f"Expected input and target to have last dimension "
+                                                     f"equal, got {init_adj.shape[-1]} and {new_adj.shape[-1]}")
+    assert new_adj.shape[-2] == assign_mat.shape[-1], (
+        f"Expected input and community assignment to have second-to-last dimension "
+        f"equal, got {init_adj.shape[-2]} and {assign_mat.shape[-2]}")
+    
+    mincut_num = rank3_trace(new_adj)
+    d_flat = torch.einsum('ijk->ij', init_adj)
+    d = rank3_diag(d_flat)
+    mincut_den = rank3_trace(
+        torch.matmul(torch.matmul(assign_mat.transpose(1, 2), d), assign_mat))
+    mincut_loss = -(mincut_num / mincut_den)
+
+    if reduction == 'mean':
+        mincut_loss = torch.mean(mincut_loss)
+    elif reduction == 'sum':
+        mincut_loss = torch.sum(mincut_loss)
+    elif reduction == 'none':
+        pass
+    else:
+        raise ValueError(f"Invalid reduction method: {reduction}. Expected 'mean', 'sum', or 'none'.")
+
+    return mincut_loss
+
+    
 
 def clustering_regularization(assign_mat: Tensor, reduction: str = 'mean') -> Tuple[Tensor, Tensor]:
     r"""

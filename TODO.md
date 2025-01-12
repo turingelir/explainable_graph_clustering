@@ -17,7 +17,7 @@
   - [ ] Clustering methods / objective functions
     - [ ] K-means
     - [x] Modularity
-    - [ ] Min-cut
+    - [x] Min-cut
     - [ ] Spectral
     - [ ] Likelihood estimation (stochastic block models)
     - [ ] Other (Energy based, entropy based approaches...)

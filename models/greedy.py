@@ -11,11 +11,6 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 import random
 import torch
 
-from graspologic.simulations import sbm
-from graspologic.plot import heatmap
-
-from functions import modularity_loss, cluster_graph, v_measure_score
-
 # Optimizer class
 # Objective function will be taken as input
 # It is a function that takes a graph and a partition and returns a scalar value that represents the quality of the partition
@@ -189,6 +184,9 @@ class GreedyOptimizer:
 
     
 if __name__ == '__main__':
+    from functions import modularity_loss, v_measure_score
+    from graspologic.simulations import sbm
+    from graspologic.plot import heatmap
     # Test the greedy optimizer
     # Define a simple objective function
     def modularity(graph, partition):
@@ -205,7 +203,7 @@ if __name__ == '__main__':
         """
         # Modularity loss from functions/loss.py
         # Requires aggregation of the adjacency matrix using the partition
-        return - modularity_loss(graph, partition, reduction='mean')
+        return - modularity_loss(graph, partition, reduction='mean', gamma=1.)
     
     ## Create example graph and partition
     # batch, number_of_nodes, number_of_clusters
@@ -228,7 +226,7 @@ if __name__ == '__main__':
     community_memberships_p = community_memberships[:,torch.randperm(sum(n))]
 
     # Convert to one-hot encoding
-    partition = torch.functional.F.one_hot(community_memberships, num_classes=n_clusters).float()
+    partition = torch.functional.F.one_hot(community_memberships_p, num_classes=n_clusters).float()
 
     # Display the graph
     heatmap(graph.squeeze(), title="Graph w/ 3 Clusters")

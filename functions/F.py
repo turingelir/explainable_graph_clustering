@@ -84,6 +84,13 @@ def softmax_w_temperature(x: Tensor, dim: int = -1, temperature: float = 1.0) ->
     p = softmax(x / temperature, dim=dim)
     return p
 
+def rank3_trace(x: Tensor) -> Tensor:
+    return torch.einsum('ijj->i', x)
+
+def rank3_diag(x: Tensor) -> Tensor:
+    eye = torch.eye(x.size(1)).type_as(x)
+    out = eye * x.unsqueeze(2).expand(x.size(0), x.size(1), x.size(1))
+    return out
 
 if __name__ == "__main__":
     # test cluster_graph

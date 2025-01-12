@@ -88,7 +88,7 @@ class GCN(Module):
 
 class GNN(Module):
     r"""
-        Graph Neural Network (GNN) block.
+        Graph Neural Network (GNN) block that encodes graph data into node embeddings.
         For given graph convolutional layers, the GNN block applies the GCN layers in sequence.
         Batch normalization may be applied before each graph convolution layer.
         Residual skip connections may be applied to the output of each graph convolution layer.
@@ -155,7 +155,7 @@ class GNN(Module):
                 :param adj: (Tensor) The adjacency matrix of the graph of shape [B, N, N] where B is the batch size and 
                         N is the number of nodes.
             Returns:
-                :return: (Tensor) The output tensor of shape [B, N, out_features] where out_features is the number of output features.
+                :return: (Tensor) The output tensor of shape [B, N, out_features] which are node embeddings for the graph.
         """
         # Apply the graph convolutional layers
         for layer in self.layers:
