@@ -2,6 +2,9 @@
     --- Graph Neural Network (GNN) Encoder ---
     Graph community encoder uses graph embeddings output from an graph encoder to estimate community memberships of nodes.
 """
+import os
+import sys
+sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from typing import Union, List, Optional
 
@@ -10,7 +13,9 @@ from functools import partial
 
 import torch
 from torch import Tensor
-from torch.nn import Sequential, Linear, ReLU, Module, functional as F, ModuleList, Softmax, ModuleList
+from torch.nn import Sequential, Linear, ReLU, SELU, Module, functional as F, ModuleList, Softmax, ModuleList
+
+from functions import to_hard_assignment
 
 # Graph Convolutional Network (GCN) encoder
 class GCN(Module):
@@ -119,7 +124,6 @@ class GNN(Module):
         self.residual = residual
         # Skip concatenation connections
         self.skip_concat = skip_concat
-        
 
         # Initialize the graph convolutional layers
         self.layers = ModuleList()
@@ -129,8 +133,13 @@ class GNN(Module):
                 self.layers.append(torch.nn.BatchNorm1d(in_features))
             # Graph convolutional layer
             if self.skip_concat:
+                # Update the input features for the next layer
                 in_features = in_features + out_features
+            # Add the graph convolutional layer
             self.layers.append(GCN(in_features, out_features, bias, activation))
+
+            # Update the input features for the next layer
+            in_features = out_features
 
         # Last graph convolutional layer
         if batch_norm:
@@ -161,5 +170,151 @@ class GNN(Module):
                     z = torch.cat((z, x), dim=-1)
                 x = z
         return x
+
+class CommDetGNN(Module):
+    r"""
+        Graph Neural Network (GNN) community detection module.
+        The Community Detection GNN uses graph embeddings output from an graph encoder to estimate community memberships of nodes.
+    """ 
+    def __init__(self, num_clusters: int, gnn: Module, mlp: Module,
+                 hard_assignment: bool = False):
+        super(CommDetGNN, self).__init__()
+        # Number of target clusters
+        self.num_clusters = num_clusters
+        # Graph neural network encoder parameters
+        self.gnn = gnn # GNN encoder
+        # Community assignment MLP
+        self.mlp = mlp # no activation function is applied
+        assert mlp[0].in_features == gnn.out_features, "The number of input features of the MLP must be equal to the number of output features of the GNN."
+        assert mlp[-1].out_features == num_clusters, "The number of output features of the MLP must be equal to the number of clusters."
+
+        # Hard assignment
+        self.hard_assignment = hard_assignment
+
+    def forward(self, x: Tensor, adj: Tensor) -> Tensor:
+        # Apply the graph neural network encoder 
+        # to obtain the node embeddings
+        z = self.gnn(x, adj)
+        # Apply the community assignment MLP
+        s = self.mlp(z)
+
+        # Pass through softmax to get probabilities
+        # for each cluster
+        s = F.softmax(s, dim=-1)
+
+        # Hard assignment
+        # Convert soft assignment to hard assignment
+        if self.hard_assignment:
+            s_h = to_hard_assignment(s) 
+            return s_h
+        else:
+            return s
+        
+### Test CommDetGNN community detection class
+if __name__ == '__main__':
+    from functions import modularity_loss, v_measure_score
+    from graspologic.simulations import sbm
+    from graspologic.plot import heatmap
+    # modularity = lambda x, y, z: -modularity_loss(x, y, gamma=z)
+    ## Create example graph and partition
+    # batch, number_of_nodes, number_of_clusters
+    b, n_nodes, n_clusters = 1, 100, 3
+    
+    # Create graphs from a stochastic block model
+    n = [n_nodes, n_nodes, n_nodes]
+    p = [[0.6, 0.2, 0.3], 
+         [0.2, 0.65, 0.2],
+         [0.3, 0.2, 0.7]]
+
+    # Print out the graph and community memberships
+    print('Graph # of nodes and p values per community:')
+    print('n:', n)
+    print('p:', p)
+
+    graph, community_memberships = sbm(n=n, p=p, loops=False, return_labels=True)
+    # Randomize the memberships order
+    community_memberships = torch.tensor(community_memberships).unsqueeze(0)
+    community_memberships_p = community_memberships[:,torch.randperm(sum(n))]
+
+    # Convert to one-hot encoding
+    partition = torch.functional.F.one_hot(community_memberships_p, num_classes=n_clusters).float()
+
+    # Display the graph
+    heatmap(graph.squeeze(), title="Graph w/ 3 Clusters")
+
+    # Graph and node tensors (single graph sample)
+    graph = torch.tensor(graph, dtype=torch.float32).unsqueeze(0)
+    nodes = torch.eye(sum(n)).unsqueeze(0)
+
+    # Test modularity loss
+    print('Initial modularity: {}'.format(-modularity_loss(graph, partition)))
+    
+    ## Initialize the Community Detection GNN
+    # GNN parameters
+    in_features = sum(n)
+    out_features = 32
+    num_layers = 2
+    bias = True
+    activation = SELU()
+    # GNN block
+    gnn = GNN(in_features, out_features, num_layers, bias, activation, GCN, batch_norm=True)
+    # MLP parameters
+    mlp = Sequential(Linear(out_features, n_clusters))
+    # Community Detection GNN
+    commdet = CommDetGNN(n_clusters, gnn, mlp)
+
+    # Modularity resolution parameter
+    gamma = 1.
+
+    ## Train the Community Detection GNN
+    # Training parameters
+    lr = 0.005
+    epochs = 200
+    optimizer = torch.optim.Adam(commdet.parameters(), lr=lr)
+    patience = 10
+    best_loss = float('inf')
+    best_partition = None
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+
+    # Set the model to training mode
+    commdet.to(device)
+    commdet.train()
+
+    # Train the model
+    for epoch in range(epochs):
+        # Forward pass
+        s = commdet(graph, nodes)
+        # Calculate modularity loss
+        loss = modularity_loss(graph, s, gamma=gamma)
+        
+        # Backward pass
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        # Update the best partition
+        if loss < best_loss:
+            best_loss = loss.item()
+            best_partition = s.detach()
+
+        # Early stopping
+        if epoch - patience > 0 and loss > best_loss:
+            print('Early stopping at epoch: {}'.format(epoch))
+            break
+        if epoch % 10 == 0:
+            print('Epoch: {}, Loss: {}'.format(epoch, round(loss.item(),4)))
+
+    # Print the best partition modularity
+    print('Best modularity: {}'.format(-best_loss))
+
+    # Evaluate the best partition with actual community memberships
+    y = community_memberships
+    y_hat = torch.argmax(best_partition, dim=-1)
+    # Calculate the accuracy using clustering metric
+    # (found clusters may be correct but in different order, thus seemingly incorrect)
+    print('V-measure score: {}'.format(v_measure_score(y, y_hat)))
+
+    # Display the best partition
+    print(y_hat)
 
 

@@ -8,15 +8,17 @@
   - [ ] Pytorch Geometric format (?)
 - [ ] Models
   - [ ] Inference/training method
-    - [ ] Graph neural network
-    - [ ] Greedy iterative 
+    - [x] Graph neural network
+    - [x] Greedy iterative
+      - [ ] Louvain method
+      - [x] Girvan-Newman method
     - [ ] Markov chain monte carlo
     - [ ] Variational bayes
   - [ ] Clustering methods / objective functions
     - [ ] K-means
-    - [ ] Modularity
+    - [x] Modularity
     - [ ] Min-cut
-    - [ ] Spectral 
+    - [ ] Spectral
     - [ ] Likelihood estimation (stochastic block models)
     - [ ] Other (Energy based, entropy based approaches...)
   - [ ] Baselines
