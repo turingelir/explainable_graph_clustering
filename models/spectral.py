@@ -8,7 +8,7 @@ import torch
 
 class SpectralEncoder:
     def __init__(self, n_clusters=3, *, eigen_solver='eigh', n_components=None,
-                    random_state=None):
+                    norm_laplacian=False, random_state=None):
         r"""
             Spectral clustering algorithm, eigenvector encoding method.
             This algorithm computes the eigenvectors of the Laplacian matrix of the graph.
@@ -57,6 +57,7 @@ class SpectralEncoder:
             self.n_components = n_components
         else:
             self.n_components = n_clusters
+        self.norm_laplacian = norm_laplacian
         self.random_state = random_state
 
         # Attributes
@@ -66,22 +67,29 @@ class SpectralEncoder:
     def __laplacian(self, A):
         r"""
             Compute the Laplacian matrix of the graph.
+            L = D - A, where D is the degree matrix and A is the adjacency matrix.
 
             Parameters:
             -----------
-                A : array-like of shape (n_samples, n_samples)
+                A : array-like of shape (n_nodes, n_nodes)
                     The adjacency matrix of the graph.
 
             Returns:
             --------
-                L : array-like of shape (n_samples, n_samples)
+                L : array-like of shape (n_nodes, n_nodes)
                     The Laplacian matrix of the graph.
         """
         # Compute the degree matrix
-        D = torch.diag(torch.sum(A, dim=-1))
+        d = torch.sum(A, dim=-1)
+        D = torch.diag(d)
 
         # Compute the Laplacian matrix
         L = D - A
+
+        # Normalize the Laplacian matrix
+        if self.norm_laplacian:
+            D_sqrt_inv = torch.diag(1.0 / torch.sqrt(d))
+            L = D_sqrt_inv @ L @ D_sqrt_inv
 
         return L
 
@@ -91,7 +99,7 @@ class SpectralEncoder:
 
             Parameters:
             -----------
-                A : array-like of shape (n_samples, n_samples)
+                A : array-like of shape (n_nodes, n_nodes)
                     The adjacency matrix of the graph.
 
             Returns:
@@ -118,7 +126,7 @@ class SpectralEncoder:
 
             Returns:
             --------
-                embedding : array-like of shape (n_samples, n_components)
+                embedding : array-like of shape (n_nodes, n_components)
                     The spectral embedding of the graph.
         """
         return self.eigenvectors_
