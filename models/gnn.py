@@ -182,9 +182,9 @@ class CommDetGNN(Module):
         # Number of target clusters
         self.num_clusters = num_clusters
         # Graph neural network encoder parameters
-        self.gnn = gnn # GNN encoder
+        self.gnn = gnn.detach().clone() # copy the GNN block
         # Community assignment MLP
-        self.mlp = mlp # no activation function is applied
+        self.mlp = mlp.detach().clone() # no activation function is applied
         assert mlp[0].in_features == gnn.out_features, "The number of input features of the MLP must be equal to the number of output features of the GNN."
         assert mlp[-1].out_features == num_clusters, "The number of output features of the MLP must be equal to the number of clusters."
 
