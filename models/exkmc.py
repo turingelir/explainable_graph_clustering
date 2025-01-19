@@ -13,6 +13,64 @@ from graspologic.plot import heatmap
 
 from spectral import SpectralEncoder
 
+class ExKMCBaseline:
+    def __init__(self, base, num_clusters=3, num_components=2, random_state=None):
+        if base == 'Spectral':
+            self.base = SpectralEncoder(n_components=num_components)
+        
+        self.num_clusters = num_clusters
+        self.random_state = random_state
+
+        self.graph = None
+        self.embeddings = None
+        self.kmeans = KMeans(self.num_clusters, random_state=self.random_state)
+        self.tree = Tree(self.num_clusters, 2*self.num_clusters)
+    
+    def create_graph(self):
+        b, n_nodes, n_clusters = 1, 100, self.num_clusters
+        
+        # Create graphs from a stochastic block model
+        n = []
+        p = []
+        for i in range(n_clusters):
+            n.append(n_nodes)
+        
+        # This is left as it is for now
+        p = [[0.6, 0.2, 0.3], 
+            [0.2, 0.65, 0.2],
+            [0.3, 0.2, 0.7]]
+
+        graph, community_memberships = sbm(n=n, p=p, loops=False, return_labels=True)
+
+        # Randomize the memberships order
+        community_memberships = torch.tensor(community_memberships).unsqueeze(0)
+        community_memberships_p = community_memberships[:,torch.randperm(sum(n))]
+
+        # Convert to one-hot encoding
+        partition = torch.functional.F.one_hot(community_memberships_p, num_classes=n_clusters).float()
+
+        # Display the graph
+        heatmap(graph.squeeze(), title="Graph w/ 3 Clusters")
+
+        self.graph = torch.tensor(graph, dtype=torch.float32).unsqueeze(0)
+    
+    def fit_base(self):
+        self.base = self.base.fit(self.graph)
+        self.embeddings = self.base.get_embeddings().squeeze(0)
+        self.embeddings = self.embeddings.reshape(self.embeddings.shape[1], self.embeddings.shape[0])
+
+        self.embeddings = self.embeddings.numpy().astype(np.double)
+    
+    def fit_and_plot_exkmc(self):
+        self.kmeans.fit(self.embeddings)
+
+        plot_kmeans(self.kmeans, self.embeddings)
+        
+        self.tree.fit(self.embeddings, self.kmeans)
+
+        plot_tree_boundary(self.tree, self.num_clusters, self.embeddings, self.kmeans, plot_mistakes=True)
+
+
 def calc_cost(tree, k, x_data):
     clusters = tree.predict(x_data)
     cost = 0
@@ -173,54 +231,7 @@ def plot_df(df, dataset, step=1, ylim=None):
     plt.show()
 
 if __name__ == '__main__':
-    b, n_nodes, n_clusters = 1, 100, 3
-    
-    # Create graphs from a stochastic block model
-    n = [n_nodes, n_nodes, n_nodes]
-    p = [[0.6, 0.2, 0.3], 
-         [0.2, 0.65, 0.2],
-         [0.3, 0.2, 0.7]]
-
-    # Print out the graph and community memberships
-    print('Graph # of nodes and p values per community:')
-    print('n:', n)
-    print('p:', p)
-
-    graph, community_memberships = sbm(n=n, p=p, loops=False, return_labels=True)
-
-    print(f"Graph type: {type(graph)} | Graph shape: {graph.shape}")
-    print(f"Community memberships type: {type(community_memberships)} | Community memberships shape: {community_memberships.shape}")
-
-    # Randomize the memberships order
-    community_memberships = torch.tensor(community_memberships).unsqueeze(0)
-    community_memberships_p = community_memberships[:,torch.randperm(sum(n))]
-
-    # Convert to one-hot encoding
-    partition = torch.functional.F.one_hot(community_memberships_p, num_classes=n_clusters).float()
-
-    # Display the graph
-    heatmap(graph.squeeze(), title="Graph w/ 3 Clusters")
-
-    graphTensor = torch.tensor(graph, dtype=torch.float32).unsqueeze(0)
-
-    specEncoder = SpectralEncoder(n_components=2)
-    specEncoder.fit(graphTensor)
-
-    embeddings = specEncoder.get_embeddings().squeeze(0)
-    embeddings = embeddings.reshape(embeddings.shape[1], embeddings.shape[0])
-
-    print(embeddings.dtype)
-
-    embeddings = embeddings.numpy().astype(np.double)
-
-    print(embeddings.dtype)
-
-    kmeans = KMeans(3, random_state=42)
-    kmeans.fit(embeddings)
-
-    plot_kmeans(kmeans, embeddings)
-
-    tree_1k = Tree(3)
-    tree_1k.fit(embeddings, kmeans)
-
-    plot_tree_boundary(tree_1k, 3, embeddings, kmeans, plot_mistakes=True)
+    exkmc = ExKMCBaseline('Spectral', num_clusters=3, num_components=2)
+    exkmc.create_graph()
+    exkmc.fit_base()
+    exkmc.fit_and_plot_exkmc()
