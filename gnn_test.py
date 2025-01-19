@@ -20,6 +20,7 @@ from functions import to_hard_assignment
 from functions import modularity_loss
 from functions.metric import v_measure_score
 from comdet_visualizer import analyze_community_results
+from community_logger import CommunityLogger
 
 # Graph Convolutional Network (GCN) encoder
 class GCN(Module):
@@ -289,31 +290,99 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
         
 if __name__ == '__main__':
     
+
+
+
+    # Initialize dataset and logger
+    dataset_name = 'citeseer'
+    logger = CommunityLogger(dataset_name)
+    
+    try:
+        # Log dataset loading
+        logger.log_info(f"Loading {dataset_name} dataset...")
+        data = get_community_dataloader(dataset_name)
+        
+        # Log dataset information
+        data_info = {
+            'num_nodes': data['node_features'].shape[1],
+            'num_features': data['node_features'].shape[2],
+            'num_communities': data['num_communities']
+        }
+        logger.log_dataset_info(data_info)
+        
+        # Train model
+        best_partition, modularity = train_community_detection(data)
+        communities = torch.argmax(best_partition, dim=-1)
+
+        ground_truth_labels = data['initial_communities']
+        
+        # Log shapes for debugging
+        debug_info = {
+            'Predicted communities shape': str(communities.shape),
+            'Ground truth labels shape': str(ground_truth_labels.shape),
+            'Unique predicted communities': len(torch.unique(communities)),
+            'Unique ground truth communities': len(torch.unique(torch.argmax(ground_truth_labels, dim=-1)))
+        }
+        logger.log_metrics(debug_info, "Debug Information")
+
+        # Analyze results
+        visualizer, metrics, fig = analyze_community_results(
+            data,
+            dataset_name,
+            communities,
+            ground_truth_labels,
+            best_partition,
+            save_dir='community_viz'
+        )
+
+        # Log final metrics
+        logger.log_metrics(metrics, "Clustering Evaluation Metrics")
+        
+    except Exception as e:
+        logger.log_error(str(e))
+        raise e   
+   
+    
+    """
     # Load and process data
-    dataset_name = 'coauthor_cs'
+    dataset_name = 'citeseer'
     data = get_community_dataloader(dataset_name)
     print(f"Loading {dataset_name} dataset...")
+    
 
     # Train model
     best_partition, modularity = train_community_detection(data)
     communities = torch.argmax(best_partition, dim=-1)
 
-    # Analyze and visualize results
+    ground_truth_labels = data['initial_communities']  # This should contain the ground truth communities
+
+    # Print shapes for debugging
+    print(f"\nDebug Information:")
+    print(f"Predicted communities shape: {communities.shape}")
+    print(f"Ground truth labels shape: {ground_truth_labels.shape}")
+    print(f"Number of unique predicted communities: {len(torch.unique(communities))}")
+    print(f"Number of unique ground truth communities: {len(torch.unique(torch.argmax(ground_truth_labels, dim=-1)))}")
+
     visualizer, metrics, fig = analyze_community_results(
         data,
         dataset_name,
         communities,
+        ground_truth_labels,
         best_partition,
         save_dir='community_viz'
     )
+
+    # Print the metrics
+    print("\nClustering Evaluation Metrics:")
+    print(f"V-measure: {metrics['v_measure']:.4f}")
+    print(f"NMI Score: {metrics['nmi']:.4f}")
+    print(f"Modularity: {metrics['modularity']:.4f}")
 
     #visualizer.plot_community_graph()
     #visualizer.plot_feature_embedding()
     #visualizer.plot_community_sizes()
     #visualizer.plot_community_connectivity()
-
-
-
-
+    
+"""
 
 

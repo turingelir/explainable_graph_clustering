@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import numpy as np
 from sklearn.manifold import TSNE
-from sklearn.metrics import silhouette_score
+from sklearn.metrics import silhouette_score, v_measure_score, normalized_mutual_info_score
 try:
     import community.community_louvain as community_louvain
 except ImportError:
@@ -17,7 +17,7 @@ class CommunityVisualizer:
     """
     A class for visualizing and analyzing community detection results
     """
-    def __init__(self, adj_matrix, node_features, communities, community_probs=None):
+    def __init__(self, adj_matrix, node_features, communities, ground_truth_labels, community_probs=None):
         """
         Initialize the visualizer with detection results
         
@@ -25,11 +25,13 @@ class CommunityVisualizer:
             adj_matrix: Adjacency matrix [N, N]
             node_features: Node features [N, F]
             communities: Community assignments [N]
+            ground_truth_labels: Ground truth community labels [N] (optional)
             community_probs: Soft community assignments [N, C] (optional)
         """
         self.adj_matrix = adj_matrix.squeeze().cpu().numpy()
         self.node_features = node_features.squeeze().cpu().numpy()
         self.communities = communities.squeeze().cpu().numpy()
+        self.ground_truth_labels = ground_truth_labels.squeeze().cpu().numpy()
         self.community_probs = community_probs.squeeze().cpu().numpy() if community_probs is not None else None
         
         # Create NetworkX graph
@@ -199,6 +201,76 @@ class CommunityVisualizer:
         except:
             metrics['silhouette'] = 0.0
             
+        # V-measure and NMI (if ground truth labels are available)
+        if self.ground_truth_labels is not None:
+
+            # Convert one-hot encoded labels to class indices if necessary
+            if len(self.ground_truth_labels.shape) > 1:
+                true_labels = np.argmax(self.ground_truth_labels, axis=1)
+            else:
+                true_labels = self.ground_truth_labels
+            
+            print("\nTrue Labels: ", true_labels.shape)
+            print("\nPredicted Labels: ", self.communities.shape)
+            # Compute similarity metrics
+
+            # V-measure score
+            metrics['v_measure'] = v_measure_score(true_labels, self.communities)
+            
+            # Normalized Mutual Information score
+            metrics['nmi'] = normalized_mutual_info_score(
+                true_labels, 
+                self.communities,
+                average_method='geometric'  # Can be changed to 'geometric' or 'min' if needed
+            )
+        else:
+            metrics['v_measure'] = None
+            metrics['nmi'] = None
+        
+                # Conductance for each community
+        conductances = []
+        print("\nDetailed Conductance Calculation:")
+        for comm in np.unique(self.communities):
+            try:
+                # Get nodes in the community
+                comm_nodes = set(np.where(self.communities == comm)[0])
+                if len(comm_nodes) == 0:
+                    print(f"Community {comm}: Empty community")
+                    conductances.append(0.0)
+                    continue
+                    
+                # Calculate internal and external edges
+                internal_edges = sum(1 for i, j in self.G.edges() 
+                                  if i in comm_nodes and j in comm_nodes)
+                external_edges = sum(1 for i, j in self.G.edges() 
+                                  if (i in comm_nodes) != (j in comm_nodes))
+                
+                # Calculate total volume (sum of degrees of nodes in community)
+                volume = sum(self.G.degree(i) for i in comm_nodes)
+                
+                # Print detailed information
+                print(f"\nCommunity {comm}:")
+                print(f"  Nodes: {len(comm_nodes)}")
+                print(f"  Internal edges: {internal_edges}")
+                print(f"  External edges: {external_edges}")
+                print(f"  Total volume: {volume}")
+                
+                # Calculate conductance
+                if volume == 0:
+                    print(f"  Conductance: 0.0 (volume is 0)")
+                    conductances.append(0.0)
+                else:
+                    conductance = external_edges / min(volume, sum(d for n, d in self.G.degree()) - volume)
+                    print(f"  Conductance: {conductance:.4f}")
+                    conductances.append(conductance)
+                    
+            except Exception as e:
+                print(f"Error in community {comm}: {str(e)}")
+                conductances.append(0.0)
+                
+        metrics['conductance'] = conductances    
+        
+        """    
         # Conductance for each community
         conductances = []
         for comm in range(self.num_communities):
@@ -213,7 +285,7 @@ class CommunityVisualizer:
             except:
                 conductances.append(0.0)
         metrics['conductance'] = conductances
-        
+        """
         return metrics
     
     def plot_interactive_graph(self, save_path=None):
@@ -278,7 +350,7 @@ class CommunityVisualizer:
             
         return fig
 
-def analyze_community_results(data, dataset_name, communities, community_probs=None, save_dir=None):
+def analyze_community_results(data, dataset_name, communities, ground_truth_labels=None, community_probs=None, save_dir=None):
     """
     Comprehensive analysis of community detection results
     
@@ -292,14 +364,22 @@ def analyze_community_results(data, dataset_name, communities, community_probs=N
         data['adj_matrix'],
         data['node_features'],
         communities,
+        ground_truth_labels,
         community_probs
     )
     
-    # Compute metrics
     metrics = visualizer.compute_metrics()
     print("\n=== Community Detection Metrics ===")
     print(f"Modularity: {metrics['modularity']:.4f}")
     print(f"Silhouette Score: {metrics['silhouette']:.4f}")
+    
+    # Print V-measure and NMI if available
+    if metrics['v_measure'] is not None:
+        print(f"V-measure Score: {metrics['v_measure']:.4f}")
+        print(f"Normalized Mutual Information: {metrics['nmi']:.4f}")
+    else:
+        print("Note: V-measure and NMI not computed (ground truth labels not provided)")
+    
     print("\nConductance per community:")
     for i, cond in enumerate(metrics['conductance']):
         print(f"Community {i}: {cond:.4f}")
