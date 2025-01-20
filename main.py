@@ -71,6 +71,7 @@ if 'results' not in os.listdir():
 import torch
 import numpy as np
 import pickle
+import matplotlib.pyplot as plt
 
 # Import baseline methods
 from sklearn.cluster import KMeans
@@ -292,6 +293,9 @@ def main(args):
     # Visualize graphs
     if 'graphs' in args['visualize']:
         for dataset_name in datasets:
+            # Data save path
+            folder_path = os.path.join(args['save_path'], dataset_name)
+
             # Load data
             if dataset_name == 'sim':
                 # Create graph data
@@ -303,14 +307,85 @@ def main(args):
             # Graph adjacency matrix
             visualization.show_mat(graph_adj, show=args['show'], save=args['save'], 
                                    title=dataset_name + ' Graph',
-                                   save_path=args['save_path'], cmap='binary')                        
+                                   save_path=folder_path, cmap='binary')                        
             # Graph block model
             aggr_graph = cluster_edges(data['adj_matrix'], data['initial_communities']).squeeze()
             # Normalize each block by the number of possible edges of each block
             aggr_pot = cluster_labels.sum(dim=0).unsqueeze(1) @ cluster_labels.sum(dim=0).unsqueeze(0)
             block_graph = aggr_graph / aggr_pot
-            visualization.show_mat(block_graph, dataset_name + ' Block Model', show=args['show'], save=args['save'], 
-                                   save_path=args['save_path'], cmap='viridis')
+            visualization.show_mat(block_graph.squeeze(), dataset_name + ' Block Model', show=args['show'], save=args['save'], 
+                                   save_path=folder_path, cmap='binary', colorbar=True)
+            
+    # Visualize predictions
+    if 'predictions' in args['visualize']:
+        for dataset_name in datasets:
+            # Load data
+            if dataset_name == 'sim':
+                # Create graph data
+                data = graph
+            else:
+                data = get_community_dataloader(dataset_name)
+            
+            # Create plots for embedding and feature data separately
+            for node_rep in args['node_rep']:
+                # Fit PCA to data for visualization in 2D
+                pca = PCA(n_components=2)
+                x = data[node_rep].squeeze().detach().numpy()
+                x_pca = pca.fit_transform(x)
+                # Scatter plot for nodes with partition labels
+                plt.scatter(x_pca[:, 0], x_pca[:, 1], c=data['initial_communities'].squeeze().argmax(dim=-1))
+                plt.title(dataset_name + ' ' + node_rep + ' Ground Truth')
+                plt.savefig(os.path.join(args['save_path'], dataset_name, dataset_name + '_' + node_rep + '_ground_truth.png'))
+                if args['show']:
+                    plt.show()
+                # Scatter plot for nodes with predictions
+                for method_name in args['methods']:
+                    if (dataset_name, method_name + '_' + node_rep) in results.keys():
+                        y_p = results[(dataset_name, method_name + '_' + node_rep)]['prediction'].squeeze().argmax(dim=-1)
+                        plt.scatter(x_pca[:, 0], x_pca[:, 1], c=y_p)
+                        plt.title(dataset_name + ' ' + node_rep + ' ' + method_name + ' Prediction')
+                        plt.savefig(os.path.join(args['save_path'], dataset_name, dataset_name + '_' + node_rep + '_' + method_name + '_prediction.png'))
+                        if args['show']:
+                            plt.show()
+
+    # Visualize performance
+    if 'performance' in args['visualize']:
+        # Create V-measure, NMI metric table for all methods
+        for dataset_name in datasets:
+            # Load data
+            if dataset_name == 'sim':
+                # Create graph data
+                data = graph
+            else:
+                data = get_community_dataloader(dataset_name)
+            # Create performance table
+            v_measure_table = np.zeros((len(args['methods']), len(args['eval'])))
+            nmi_table = np.zeros((len(args['methods']), len(args['eval'])))
+            
+            # Fill tables iterating over results
+            for i, method_name in enumerate(results.keys()):
+                for j, eval_name in enumerate(args['eval']):
+                    if eval_name == 'V-measure':
+                        v_measure_table[i, j] = v_measure_score(data['initial_communities'].squeeze().argmax(dim=-1), 
+                                                                results[method_name]['prediction'].squeeze().argmax(dim=-1))
+                    elif eval_name == 'NMI':
+                        nmi_table[i, j] = normalized_mutual_info_score(data['initial_communities'].squeeze().argmax(dim=-1), 
+                                                                results[method_name]['prediction'].squeeze().argmax(dim=-1))
+            # Save tables to disk
+            np.save(os.path.join(args['save_path'], dataset_name, 'V-measure_table.npy'), v_measure_table)
+            np.save(os.path.join(args['save_path'], dataset_name, 'NMI_table.npy'), nmi_table)
+            # Create bar plots
+            fig, ax = plt.subplots(2, 1, figsize=(10, 10))
+            ax[0].bar(args['methods'], v_measure_table.mean(axis=1), yerr=v_measure_table.std(axis=1), capsize=5)
+            ax[0].set_title(dataset_name + ' V-measure')
+            ax[0].set_ylabel('V-measure')
+            ax[1].bar(args['methods'], nmi_table.mean(axis=1), yerr=nmi_table.std(axis=1), capsize=5)
+            ax[1].set_title(dataset_name + ' NMI')
+            ax[1].set_ylabel('NMI')
+            plt.savefig(os.path.join(args['save_path'], dataset_name, dataset_name + '_performance.png'))
+            if args['show']:
+                plt.show()
+
 
             
 
@@ -321,8 +396,8 @@ if __name__ == '__main__':
 
     # Take arguments
     args = {'modes': ['fit', 'eval', 'visualize', ], # 'load', 
-            'methods': [], # 'GNN', 'K-means', 'ExKMC' ; 'IterativeGreedy', 'IMM',
-            'baselines': [], # 'K-means', 'ExKMC' ; 'IMM', 
+            'methods': ['GNN', 'K-means', 'ExKMC'], #  ; 'IterativeGreedy', 'IMM',
+            'baselines': ['K-means', 'ExKMC'], #  ; 'IMM', 
             'node_rep': ['node_embeddings', 'node_features'],
             'datasets': ['sim'], # 'Citeseer', 'Amazon', 
             'obj_funcs': [modularity_loss], # 'min-cut' 
