@@ -13,10 +13,23 @@ from graspologic.plot import heatmap
 
 from spectral import SpectralEncoder
 
+class IMMBaseline:
+    def __init__(self, num_clusters=3, random_state=None):
+        self.num_clusters = num_clusters
+        self.random_state = random_state
+
+        self.graph = None
+        self.embeddings = None
+        self.kmeans = KMeans(self.num_clusters, random_state=self.random_state)
+        self.tree = Tree(self.num_clusters, 2*self.num_clusters)
+
+
 class ExKMCBaseline:
     def __init__(self, base, num_clusters=3, num_components=2, random_state=None):
         if base == 'Spectral':
             self.base = SpectralEncoder(n_components=num_components)
+        else:
+            self.base = lambda x: x
         
         self.num_clusters = num_clusters
         self.random_state = random_state
@@ -61,6 +74,10 @@ class ExKMCBaseline:
 
         self.embeddings = self.embeddings.numpy().astype(np.double)
     
+    def fit(self, x_data):
+        self.kmeans.fit(x_data)
+        self.tree.fit(x_data, self.kmeans)
+
     def fit_and_plot_exkmc(self):
         self.kmeans.fit(self.embeddings)
 
