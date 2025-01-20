@@ -114,11 +114,14 @@ def experiment_kmeans(data, args):
     """
     # Results dictionary
     res = {}
+    # Data
+    x = data[data['node_rep']].squeeze().detach().numpy()
     # K-means clustering
     kmeans = KMeans(n_clusters=data['num_communities'], random_state=0)
-    kmeans.fit(data[data['node_rep']].squeeze())
+    kmeans.fit(x)
     # Clustering predictions
-    res['prediction'] = kmeans.labels_
+    y_p = kmeans.predict(x)
+    res['prediction'] = torch.functional.F.one_hot(torch.tensor(y_p, dtype=torch.int64), num_classes=data['num_communities']).float()
 
     res['model'] = kmeans
 
@@ -139,13 +142,17 @@ def experiment_exkmc(data, args):
     res = {}
     # ExKMC clustering
     baseline = ExKMCBaseline(num_clusters=data['num_communities'], num_components=data['num_communities'], random_state=0)
+    # Data
+    x = data[data['node_rep']].squeeze().detach().numpy()
     # Visualize tree
     if 'visualize' in args['modes']:
-        baseline.fit_and_plot_exkmc(data[data['node_rep']], title= data['dataset_name'] + data['node_rep'] + ' ExKMC')
+        baseline.fit_and_plot_exkmc(x, title= data['dataset_name'] + data['node_rep'] + ' ExKMC')
     else:
-        baseline.fit(data[data['node_rep']].squeeze())
+        baseline.fit(x)
     # Clustering predictions
-    res['prediction'] = baseline.labels_
+    # Convert predictions to one-hot encoding
+    y_p = baseline.predict(x)
+    res['prediction'] = torch.functional.F.one_hot(torch.tensor(y_p, dtype=torch.int64), num_classes=data['num_communities']).float()
 
     res['model'] = baseline
 
@@ -244,7 +251,7 @@ def main(args):
         else:
             data = get_community_dataloader(dataset_name)
             # Add dataset name to data
-            data['dataset_name'] = dataset_name
+        data['dataset_name'] = dataset_name
 
         # Baseline methods only work on sample x features data
         # So, we need to extract node embeddings or node features from data.

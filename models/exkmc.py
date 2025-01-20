@@ -35,8 +35,6 @@ class ExKMCBaseline:
     def __init__(self, base=None, num_clusters=3, num_components=2, random_state=None, name="ExKMCBaseline"):
         if base == 'Spectral':
             self.base = SpectralEncoder(n_components=num_components)
-        else:
-            self.base = lambda x: x
         
         self.num_clusters = num_clusters
         self.random_state = random_state
@@ -84,18 +82,27 @@ class ExKMCBaseline:
         self.embeddings = self.embeddings.numpy().astype(np.double)
     
     def fit(self, x_data):
-        self.kmeans.fit(x_data)
-        self.tree.fit(x_data, self.kmeans)
+        x = x_data.astype(np.double) if x_data is not None else self.embeddings
+        self.kmeans.fit(x)
+        self.tree.fit(x, self.kmeans)
+
+        return self
 
     def fit_and_plot_exkmc(self, x_data=None, title="ExKMC Baseline"):
-        self.kmeans.fit(x_data)
+        x = x_data.astype(np.double) if x_data is not None else self.embeddings
+        self.kmeans.fit(x)
 
-        plot_kmeans(self.kmeans, x_data, title="K-Means Clustering")
+        plot_kmeans(self.kmeans, x, title="K-Means Clustering")
         
-        self.tree.fit(x_data, self.kmeans)
+        self.tree.fit(x, self.kmeans)
 
-        plot_tree_boundary(self.tree, self.num_clusters, x_data, self.kmeans, plot_mistakes=True, title="Cluster Tree Boundary")
+        plot_tree_boundary(self.tree, self.num_clusters, x, self.kmeans, plot_mistakes=True, title="Cluster Tree Boundary")
 
+        return self
+
+    def predict(self, x_data):
+        x = x_data.astype(np.double) if x_data is not None else self.embeddings
+        return self.tree.predict(x)
 
 def calc_cost(tree, k, x_data):
     clusters = tree.predict(x_data)
@@ -136,7 +143,7 @@ def plot_kmeans(kmeans, x_data, title="K-Means Clustering"):
     ########### K-MEANS Clustering ###########
     plt.figure(figsize=(4, 4))
     
-    Z = kmeans.predict(values)
+    Z = kmeans.predict(values.astype(np.double))
     Z = Z.reshape(xx.shape)
     plt.imshow(Z, interpolation='nearest',
                extent=(xx.min(), xx.max(), yy.min(), yy.max()),
@@ -173,7 +180,7 @@ def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=True, titl
                          np.arange(y_min, y_max, .1))
 
     values = np.c_[xx.ravel(), yy.ravel()]
-    values = pca.inverse_transform(values)
+    values = pca.inverse_transform(values).astype(np.double)
     
     y_cluster_tree = cluster_tree.predict(x_data_orig)
 
