@@ -116,8 +116,8 @@ def generate_graph(n_samples: int=1, n_nodes: int=300, n_clusters: int=3,
             :arg cluster_covs: Covariance matrices for each cluster.
             :arg random_order: Randomize cluster assignments.
         Returns:
-            :return graph: Adjacency matrix tensor of shape [B, N, N].
             :return nodes: Node feature tensor of shape [B, N, F].
+            :return graph: Adjacency matrix tensor of shape [B, N, N].
             :return partition: Cluster assignment tensor of shape [B, N, C].
     """
     ## Create example graph and partition
@@ -169,7 +169,7 @@ def generate_graph(n_samples: int=1, n_nodes: int=300, n_clusters: int=3,
     nodes = nodes.unsqueeze(0)
     partition = partition.unsqueeze(0)
 
-    return graph, nodes, partition
+    return nodes, graph, partition
     
 
 if __name__ == "__main__":
