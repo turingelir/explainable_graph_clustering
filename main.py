@@ -71,6 +71,7 @@ if 'results' not in os.listdir():
 
 import torch
 import numpy as np
+import pickle
 
 from models import SpectralEncoder
 from utils import visualization
@@ -81,11 +82,14 @@ from gnn_test import train_community_detection
 def exp_GNN(data, obj_func, args):
     r"""
         Method for GNN experiment.
+        TODO:
+            Add loading ready GNN for only testing
     """
     # Call GNN training method
     if 'train' in args['modes']:
         res = train_community_detection(data, criterion=obj_func, return_dict=True)
-    
+    else:
+        res = {}
     return res
 
 def experiment(data, method_name, args):
@@ -100,15 +104,21 @@ def experiment(data, method_name, args):
             :arg method_name: Method name to apply on data.
             :arg args: Arguments dictionary.
     """
-    # Pass data to appropriate method experiment method.
+    # Pass data to appropriate method experiment.
     if method_name == 'GNN':
-        # Call GNN experiment method
+        # Call GNN method
         res = exp_GNN(data, args['obj_funcs'][0], args)
     elif method_name == 'IterativeGreedy':
-        # Call IterativeGreedy experiment method
+        # Call IterativeGreedy method
+        pass
+    elif method_name == 'K-means':
+        # Call K-means method
+        pass
+    elif method_name == 'Trees':
+        # Call Trees method
         pass
     elif method_name == 'ExKMC':
-        # Call baseline ExKMC methods (K-means, Trees, K-means w/ surrogate cost)
+        # Call ExKMC method
         pass
     else:
         raise NotImplementedError(f"Method {method_name} is not implemented.")
@@ -116,13 +126,24 @@ def experiment(data, method_name, args):
     # Save results to disk
     for key, val in res.items():
         # Check val data type and save accordingly
+        # Torch tensor
         if isinstance(val, torch.Tensor):
             torch.save(val, os.path.join(args['save_path'], f"{method_name}_{key}.pt"))
+        # Numpy array
         elif isinstance(val, np.ndarray):
             np.save(os.path.join(args['save_path'], f"{method_name}_{key}.npy"), val)
+        # Class object
+        elif isinstance(val, object):
+            with open(os.path.join(args['save_path'], f"{method_name}_{key}.pkl"), 'wb') as f:
+                pickle.dump(val, f)
         else:
             with open(os.path.join(args['save_path'], f"{method_name}_{key}.txt"), 'w') as f:
                 f.write(val)
+
+    # Evaluation
+    if 'eval' in args['modes']:
+        # Call evaluation method
+        pass
 
     
 
@@ -150,10 +171,9 @@ if __name__ == '__main__':
 
     # Take arguments
     args = {'modes': ['eval', 'visualize'], # 'train', 
-            'methods': ['GNN', 'IterativeGreedy', 'ExKMC'], 
+            'methods': ['GNN', 'IterativeGreedy', 'K-means', 'Trees', 'ExKMC'], 
             'datasets': ['sim'], # 'Citeseer', 'Amazon', 
             'obj_funcs': [modularity_loss], # 'min-cut' 
-            'baselines': ['K-means', 'Trees', 'K-means w/ surrogate cost'],
             'visualize': ['graphs', 'predictions', 'performance'],
             'eval': ['V-measure', 'NMI'],
             'dim_red': ['PCA'], # 't-SNE'
