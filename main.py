@@ -366,11 +366,11 @@ def main(args):
             for i, method_name in enumerate(results.keys()):
                 for j, eval_name in enumerate(args['eval']):
                     if eval_name == 'V-measure':
-                        v_measure_table[i, j] = v_measure_score(data['initial_communities'].squeeze().argmax(dim=-1), 
-                                                                results[method_name]['prediction'].squeeze().argmax(dim=-1))
+                        v_measure_table[i, j] = v_measure_score(data['initial_communities'].squeeze().argmax(dim=-1).cpu().numpy(), 
+                                                                results[method_name]['prediction'].squeeze().argmax(dim=-1).cpu().numpy())
                     elif eval_name == 'NMI':
-                        nmi_table[i, j] = normalized_mutual_info_score(data['initial_communities'].squeeze().argmax(dim=-1), 
-                                                                results[method_name]['prediction'].squeeze().argmax(dim=-1))
+                        nmi_table[i, j] = normalized_mutual_info_score(data['initial_communities'].squeeze().argmax(dim=-1).cpu().numpy(), 
+                                                                results[method_name]['prediction'].squeeze().argmax(dim=-1).cpu().numpy())
             # Save tables to disk
             np.save(os.path.join(args['save_path'], dataset_name, 'V-measure_table.npy'), v_measure_table)
             np.save(os.path.join(args['save_path'], dataset_name, 'NMI_table.npy'), nmi_table)
@@ -408,7 +408,8 @@ if __name__ == '__main__':
             'device': 'cuda' if torch.cuda.is_available() else 'cpu',
             'save_path': os.path.join(os.getcwd(), 'results'),
             'show': False,
-            'save': True
+            'save': True,
+            'epochs': 100
             }
     assert not(args['modes'].count('fit') and args['modes'].count('load')), "Only fit or load mode can be selected at a time."
 
