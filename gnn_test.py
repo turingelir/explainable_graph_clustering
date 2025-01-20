@@ -7,7 +7,8 @@ import sys
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from typing import Union, List, Optional
-
+import random
+import numpy as np
 import gc
 from functools import partial
 
@@ -21,6 +22,17 @@ from functions import modularity_loss
 from functions.metric import v_measure_score
 from comdet_visualizer import analyze_community_results
 from community_logger import CommunityLogger
+
+def set_seed(seed):
+    """Set random seed for reproducibility"""
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed(seed)
+        torch.cuda.manual_seed_all(seed)
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
 
 # Graph Convolutional Network (GCN) encoder
 class GCN(Module):
@@ -207,7 +219,8 @@ class CommDetGNN(Module):
 
 def train_community_detection(data, device='cuda' if torch.cuda.is_available() else 'cpu',
                             lr=0.005, epochs=200, patience=10, 
-                            criterion=modularity_loss, return_dict=False):
+                            criterion=modularity_loss, return_dict=False,
+                            save_dir='models', seed=42):
     """
     Train the community detection model on the provided dataset.
     
@@ -221,7 +234,17 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
         lr: Learning rate
         epochs: Maximum number of epochs
         patience: Early stopping patience
+        criterion: Loss function
+        return_dict: Whether to return a dictionary of results
+        save_dir: Directory to save model checkpoints
+        seed: Random seed for reproducibility
     """
+    # Set random seed
+    set_seed(seed)
+    
+    # Create save directory if it doesn't exist
+    os.makedirs(save_dir, exist_ok=True)
+    
     # Get dimensions from data
     num_nodes = data['node_features'].shape[1]
     num_features = data['node_features'].shape[2]
@@ -256,6 +279,7 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
     # Training loop
     best_loss = float('inf')
     best_partition = None
+    best_epoch = 0
     no_improve = 0
     
     model.train()
@@ -275,6 +299,18 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
         if loss < best_loss:
             best_loss = loss.item()
             best_partition = communities.detach()
+            best_epoch = epoch
+            
+            # Save best model
+            checkpoint = {
+                'epoch': epoch,
+                'model_state_dict': model.state_dict(),
+                'optimizer_state_dict': optimizer.state_dict(),
+                'loss': best_loss,
+                'seed': seed
+            }
+            torch.save(checkpoint, os.path.join(save_dir, 'best_model.pth'))
+            
             no_improve = 0
         else:
             no_improve += 1
@@ -287,11 +323,24 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
         if epoch % 10 == 0:
             print(f'Epoch {epoch}: Loss = {loss.item():.4f}')
 
+    # Save final model
+    final_checkpoint = {
+        'epoch': epoch,
+        'model_state_dict': model.state_dict(),
+        'optimizer_state_dict': optimizer.state_dict(),
+        'loss': loss.item(),
+        'seed': seed
+    }
+    torch.save(final_checkpoint, os.path.join(save_dir, 'final_model.pth'))
+
+    print(f'Best model saved at epoch {best_epoch} with loss {best_loss:.4f}')
+    
     # Save results to dict
     res = {
         'model': model.state_dict(),
         'prediction': best_partition,
-        'best_loss': -best_loss # Return positive modularity
+        'best_loss': -best_loss, # Return positive modularity
+        'best_epoch': best_epoch
     }
     if return_dict:
         return res
@@ -299,8 +348,8 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
         
 if __name__ == '__main__':
     
-
-
+    SEED = 42
+    set_seed(SEED)    
 
     # Initialize dataset and logger
     dataset_name = 'citeseer'
@@ -320,7 +369,7 @@ if __name__ == '__main__':
         logger.log_dataset_info(data_info)
         
         # Train model
-        best_partition, modularity = train_community_detection(data)
+        best_partition, modularity = train_community_detection(data, save_dir='models/citeseer', seed=SEED)
         communities = torch.argmax(best_partition, dim=-1)
 
         ground_truth_labels = data['initial_communities']
@@ -352,46 +401,5 @@ if __name__ == '__main__':
         raise e   
    
     
-    """
-    # Load and process data
-    dataset_name = 'citeseer'
-    data = get_community_dataloader(dataset_name)
-    print(f"Loading {dataset_name} dataset...")
-    
-
-    # Train model
-    best_partition, modularity = train_community_detection(data)
-    communities = torch.argmax(best_partition, dim=-1)
-
-    ground_truth_labels = data['initial_communities']  # This should contain the ground truth communities
-
-    # Print shapes for debugging
-    print(f"\nDebug Information:")
-    print(f"Predicted communities shape: {communities.shape}")
-    print(f"Ground truth labels shape: {ground_truth_labels.shape}")
-    print(f"Number of unique predicted communities: {len(torch.unique(communities))}")
-    print(f"Number of unique ground truth communities: {len(torch.unique(torch.argmax(ground_truth_labels, dim=-1)))}")
-
-    visualizer, metrics, fig = analyze_community_results(
-        data,
-        dataset_name,
-        communities,
-        ground_truth_labels,
-        best_partition,
-        save_dir='community_viz'
-    )
-
-    # Print the metrics
-    print("\nClustering Evaluation Metrics:")
-    print(f"V-measure: {metrics['v_measure']:.4f}")
-    print(f"NMI Score: {metrics['nmi']:.4f}")
-    print(f"Modularity: {metrics['modularity']:.4f}")
-
-    #visualizer.plot_community_graph()
-    #visualizer.plot_feature_embedding()
-    #visualizer.plot_community_sizes()
-    #visualizer.plot_community_connectivity()
-    
-"""
 
 
