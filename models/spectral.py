@@ -8,7 +8,7 @@ import torch
 
 class SpectralEncoder:
     def __init__(self, n_clusters=3, *, eigen_solver='eigh', n_components=None,
-                    norm_laplacian=False, random_state=None):
+                    norm_laplacian=True, random_state=None):
         r"""
             Spectral clustering algorithm, eigenvector encoding method.
             This algorithm computes the eigenvectors of the Laplacian matrix of the graph.
@@ -119,7 +119,24 @@ class SpectralEncoder:
         self.eigenvectors_ = eigenvectors[:, :self.n_components]
 
         return self
-    
+
+    def fit_transform(self, A):
+        r"""
+            Compute the spectral embedding of the graph.
+
+            Parameters:
+            -----------
+                A : array-like of shape (n_nodes, n_nodes)
+                    The adjacency matrix of the graph.
+
+            Returns:
+            --------
+                embedding : array-like of shape (n_nodes, n_components)
+                    The spectral embedding of the graph.
+        """
+        self.fit(A)
+        return self.eigenvectors_
+
     def get_embeddings(self):
         r"""
             Get the spectral embedding of the graph.
