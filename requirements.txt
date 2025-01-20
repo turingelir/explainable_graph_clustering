@@ -6,3 +6,5 @@ graspologic==3.3.0
 networkx==2.7
 batchgenerators==0.25
 ExKMC
+plotly
+ogb
