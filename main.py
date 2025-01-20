@@ -145,9 +145,9 @@ def experiment_exkmc(data, args):
     else:
         baseline.fit(data[data['node_rep']].squeeze())
     # Clustering predictions
-    res['prediction'] = exkmc.labels_
+    res['prediction'] = baseline.labels_
 
-    res['model'] = exkmc
+    res['model'] = baseline
 
     return res
 

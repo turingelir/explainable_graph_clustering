@@ -32,7 +32,7 @@ class IMMBaseline:
 
 
 class ExKMCBaseline:
-    def __init__(self, base, num_clusters=3, num_components=2, random_state=None, name="ExKMCBaseline"):
+    def __init__(self, base=None, num_clusters=3, num_components=2, random_state=None, name="ExKMCBaseline"):
         if base == 'Spectral':
             self.base = SpectralEncoder(n_components=num_components)
         else:
