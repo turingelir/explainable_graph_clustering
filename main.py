@@ -376,7 +376,7 @@ def main(args):
             np.save(os.path.join(args['save_path'], dataset_name, 'NMI_table.npy'), nmi_table)
             # Create bar plots
             fig, ax = plt.subplots(2, 1, figsize=(10, 10))
-            res_names = [str(method_name) for method_name in results.keys()]
+            res_names = [str(method_name[1:][0]) for method_name in results.keys()]
             ax[0].bar(res_names, v_measure_table.mean(axis=1), yerr=v_measure_table.std(axis=1), capsize=5)
             ax[0].set_title(dataset_name + ' V-measure')
             ax[0].set_ylabel('V-measure')
@@ -408,8 +408,7 @@ if __name__ == '__main__':
             'device': 'cuda' if torch.cuda.is_available() else 'cpu',
             'save_path': os.path.join(os.getcwd(), 'results'),
             'show': False,
-            'save': True,
-            'epochs': 1
+            'save': True
             }
     assert not(args['modes'].count('fit') and args['modes'].count('load')), "Only fit or load mode can be selected at a time."
 
