@@ -359,8 +359,8 @@ def main(args):
             else:
                 data = get_community_dataloader(dataset_name)
             # Create performance table
-            v_measure_table = np.zeros((len(args['methods']), len(args['eval'])))
-            nmi_table = np.zeros((len(args['methods']), len(args['eval'])))
+            v_measure_table = np.zeros((len(results.keys()), len(args['eval'])))
+            nmi_table = np.zeros((len(results.keys()), len(args['eval'])))
             
             # Fill tables iterating over results
             for i, method_name in enumerate(results.keys()):
@@ -376,10 +376,11 @@ def main(args):
             np.save(os.path.join(args['save_path'], dataset_name, 'NMI_table.npy'), nmi_table)
             # Create bar plots
             fig, ax = plt.subplots(2, 1, figsize=(10, 10))
-            ax[0].bar(args['methods'], v_measure_table.mean(axis=1), yerr=v_measure_table.std(axis=1), capsize=5)
+            res_names = [str(method_name) for method_name in results.keys()]
+            ax[0].bar(res_names, v_measure_table.mean(axis=1), yerr=v_measure_table.std(axis=1), capsize=5)
             ax[0].set_title(dataset_name + ' V-measure')
             ax[0].set_ylabel('V-measure')
-            ax[1].bar(args['methods'], nmi_table.mean(axis=1), yerr=nmi_table.std(axis=1), capsize=5)
+            ax[1].bar(res_names, nmi_table.mean(axis=1), yerr=nmi_table.std(axis=1), capsize=5)
             ax[1].set_title(dataset_name + ' NMI')
             ax[1].set_ylabel('NMI')
             plt.savefig(os.path.join(args['save_path'], dataset_name, dataset_name + '_performance.png'))

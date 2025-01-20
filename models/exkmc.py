@@ -115,7 +115,7 @@ def calc_cost(tree, k, x_data):
                 cost += np.linalg.norm(x - center) ** 2
     return cost
 
-def plot_kmeans(kmeans, x_data, title="K-Means Clustering", path='results'):
+def plot_kmeans(kmeans, x_data, title="K-Means Clustering", path='results', show=False):
     r"""
         Plot the K-Means clustering results.
         Args:
@@ -161,9 +161,10 @@ def plot_kmeans(kmeans, x_data, title="K-Means Clustering", path='results'):
     plt.yticks([])
     plt.title("Near Optimal Baseline", fontsize=14)
     plt.savefig(os.path.join(path, title.lower().replace(" ", "_") + ".png"))
-    plt.show()
+    if show:
+        plt.show()
     
-def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=True, title="Cluster Tree Boundary", path='results'):
+def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=True, title="Cluster Tree Boundary", path='results', show=False):
     cmap = plt.colormaps.get_cmap('PuBuGn')
 
     # Transform the data to a 2D space
@@ -207,7 +208,8 @@ def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=True, titl
     plt.yticks([])
     plt.title("Approximation Ratio: %.2f" % (cluster_tree.score(x_data_orig) / -kmeans.score(x_data_orig)), fontsize=14)
     plt.savefig(os.path.join(path, title.lower().replace(" ", "_") + ".png"))
-    plt.show()
+    if show:
+        plt.show()
     
 def plot_confusion_matrix(y_true, y_pred, classes,
                           normalize=False,
