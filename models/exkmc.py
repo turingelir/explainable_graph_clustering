@@ -78,14 +78,14 @@ class ExKMCBaseline:
         self.kmeans.fit(x_data)
         self.tree.fit(x_data, self.kmeans)
 
-    def fit_and_plot_exkmc(self):
-        self.kmeans.fit(self.embeddings)
+    def fit_and_plot_exkmc(self, x_data=None):
+        self.kmeans.fit(x_data)
 
-        plot_kmeans(self.kmeans, self.embeddings)
+        plot_kmeans(self.kmeans, x_data)
         
-        self.tree.fit(self.embeddings, self.kmeans)
+        self.tree.fit(x_data, self.kmeans)
 
-        plot_tree_boundary(self.tree, self.num_clusters, self.embeddings, self.kmeans, plot_mistakes=True)
+        plot_tree_boundary(self.tree, self.num_clusters, x_data, self.kmeans, plot_mistakes=True)
 
 
 def calc_cost(tree, k, x_data):

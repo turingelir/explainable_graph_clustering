@@ -117,6 +117,39 @@ def experiment_kmeans(data, args):
     # K-means clustering
     kmeans = KMeans(n_clusters=data['num_communities'], random_state=0)
     kmeans.fit(data[data['node_rep']])
+    # Clustering predictions
+    res['prediction'] = kmeans.labels_
+
+    res['param'] = kmeans.cluster_centers_
+
+    return res
+
+def experiment_xkmc(data, args):
+    r"""
+        Method for ExKMC experiment.
+        Given samples x features data, apply ExKMC clustering.
+        Output returns clustering predictions, performance metrics and model parameters.
+        Args:
+            :arg data: Node embeddings or node features data.
+            :arg args: Arguments dictionary.
+        Returns:
+            :return res: Result dictionary.
+    """
+    # Results dictionary
+    res = {}
+    # ExKMC clustering
+    exkmc = exkmc.ExKMCBaseline(num_clusters=data['num_communities'], num_components=data['num_communities'], random_state=0)
+    # Visualize tree
+    if 'visualize' in args['modes']:
+        exkmc.fit_and_plot_exkmc(data[data['node_rep']])
+    else:
+        exkmc.fit(data[data['node_rep']])
+    # Clustering predictions
+    res['prediction'] = exkmc.labels_
+
+    res['param'] = exkmc.kmeans.cluster_centers_
+
+    return res
 
 
 def experiment(data, method_name, args):
@@ -149,7 +182,7 @@ def experiment(data, method_name, args):
         pass
     elif method_name == 'ExKMC':
         # Call ExKMC method
-        pass
+        res = experiment_xkmc(data, args)
     else:
         raise NotImplementedError(f"Method {method_name} is not implemented.")
     
