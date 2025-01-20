@@ -78,6 +78,7 @@ from utils import visualization
 from functions import modularity_loss, min_cut_loss, clustering_regularizer, generate_graph
 
 from gnn_test import train_community_detection
+from datasets import get_community_dataloader
 
 def exp_GNN(data, obj_func, args):
     r"""
@@ -104,6 +105,9 @@ def experiment(data, method_name, args):
             :arg method_name: Method name to apply on data.
             :arg args: Arguments dictionary.
     """
+    # Results dictionary
+    res = {}
+
     # Pass data to appropriate method experiment.
     if method_name == 'GNN':
         # Call GNN method
@@ -167,18 +171,43 @@ def main(args):
     graph = generate_graph()
     
     # Datasets list 
-    datasets = {'sim': graph}
+    datasets = ['sim']
 
     ####        2. Experiment(s)        ####
     # Results dictionary
     results = {}
     # Call experiment method over each dataset and method 
-    for dataset_name, data in datasets.items():
+    for dataset_name in datasets:
+        # Load data
+        if dataset_name == 'sim':
+            # Create graph data
+            data = graph
+        else:
+            data = get_community_dataloader(dataset_name)
+
+        # Baseline methods only work on sample x features data
+        # So, we need to extract node embeddings or node features from data.
+        # We can use SpectralEncoder for this purpose.
+        encoder = SpectralEncoder(data['num_communities'], norm_laplacian=True)
+        # Encode graph data
+        node_embeddings = encoder().fit
+        
         for method_name in args['methods']:
             results[(dataset_name, method_name)] = experiment(data, method_name, args)
     # Save results to disk
     save_results(results, args['save_path'])
-                
+
+    ####        3. Evaluation & Visualization        ####
+    # Visualize graphs
+    if 'graphs' in args['visualize']:
+        for dataset_name, data in datasets.items():
+            graph_adj = data['adj_matrix']
+            # Graph adjacency matrix
+            visualization.show_mat(graph_adj.squeeze(), dataset_name, show=args['show'], save=args['save'], 
+                                   save_path=os.path.join(args['save_path'], dataset_name), cmap='binary')
+            # Graph block-model
+            
+            
 
 
 if __name__ == '__main__':
@@ -188,6 +217,7 @@ if __name__ == '__main__':
     # Take arguments
     args = {'modes': ['eval', 'visualize'], # 'train', 
             'methods': ['GNN', 'IterativeGreedy', 'K-means', 'Trees', 'ExKMC'], 
+            'node_rep': ['embeddings', 'features'],
             'datasets': ['sim'], # 'Citeseer', 'Amazon', 
             'obj_funcs': [modularity_loss], # 'min-cut' 
             'visualize': ['graphs', 'predictions', 'performance'],
@@ -195,6 +225,9 @@ if __name__ == '__main__':
             'dim_red': ['PCA'], # 't-SNE'
             'device': 'cuda' if torch.cuda.is_available() else 'cpu',
             'save_path': os.path.join(os.getcwd(), 'results'),
+            'show': False,
+            'save': True,
+            'load': False # Can be a dict of paths for each method, dataset
             }
     # Call main method
     main(args)
