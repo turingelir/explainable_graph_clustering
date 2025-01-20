@@ -101,7 +101,7 @@ def experiment(data, method_name, args):
         These results are saved to disk for later evaluation.
         According to visualization and evaluation modes, the results are displayed.
         Args:
-            :arg data: Graph data sample.
+            :arg data: Graph dict data or node embeddings/features data.
             :arg method_name: Method name to apply on data.
             :arg args: Arguments dictionary.
     """
