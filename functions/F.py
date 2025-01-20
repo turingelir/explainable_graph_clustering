@@ -142,8 +142,8 @@ def generate_graph(n_samples: int=1, n_nodes: int=300, n_clusters: int=3,
     ## Cluster assignments: S
     # Randomize the memberships order
     community_memberships = torch.tensor(community_memberships).unsqueeze(0)
-    if random_order:
-        community_memberships = community_memberships[:,torch.randperm(sum(n))]
+    # if random_order:
+    #    community_memberships = community_memberships[:,torch.randperm(sum(n))]
     # Convert to one-hot encoding
     partition = torch.functional.F.one_hot(community_memberships, num_classes=n_clusters).float()
 
@@ -168,7 +168,6 @@ def generate_graph(n_samples: int=1, n_nodes: int=300, n_clusters: int=3,
     graph = torch.tensor(graph, dtype=torch.float32).unsqueeze(0)
     # nodes = torch.eye(sum(n)).unsqueeze(0)
     nodes = nodes.unsqueeze(0)
-    partition = partition.unsqueeze(0)
 
     if return_dict:
         return {
@@ -186,7 +185,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
 
     # Generate graph data
-    graph, nodes, partition = generate_graph()
+    nodes, graph, partition = generate_graph(return_dict=False)
 
     # Display shapes
     print("Graph shape:", graph.shape)
