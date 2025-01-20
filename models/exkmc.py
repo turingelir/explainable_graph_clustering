@@ -88,15 +88,15 @@ class ExKMCBaseline:
 
         return self
 
-    def fit_and_plot_exkmc(self, x_data=None, title="ExKMC Baseline"):
+    def fit_and_plot_exkmc(self, x_data=None, title="ExKMC Baseline", path='results', plot_mistakes=True):
         x = x_data.astype(np.double) if x_data is not None else self.embeddings
         self.kmeans.fit(x)
 
-        plot_kmeans(self.kmeans, x, title="K-Means Clustering")
+        plot_kmeans(self.kmeans, x, title=title, path=path)
         
         self.tree.fit(x, self.kmeans)
 
-        plot_tree_boundary(self.tree, self.num_clusters, x, self.kmeans, plot_mistakes=True, title="Cluster Tree Boundary")
+        plot_tree_boundary(self.tree, self.num_clusters, x, self.kmeans, plot_mistakes=True, title=title, path=path)
 
         return self
 
@@ -115,7 +115,7 @@ def calc_cost(tree, k, x_data):
                 cost += np.linalg.norm(x - center) ** 2
     return cost
 
-def plot_kmeans(kmeans, x_data, title="K-Means Clustering"):
+def plot_kmeans(kmeans, x_data, title="K-Means Clustering", path='results'):
     r"""
         Plot the K-Means clustering results.
         Args:
@@ -160,10 +160,10 @@ def plot_kmeans(kmeans, x_data, title="K-Means Clustering"):
     plt.xticks([])
     plt.yticks([])
     plt.title("Near Optimal Baseline", fontsize=14)
-    plt.savefig(os.path.join("results", title.lower().replace(" ", "_") + ".png"))
+    plt.savefig(os.path.join(path, title.lower().replace(" ", "_") + ".png"))
     plt.show()
     
-def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=True, title="Cluster Tree Boundary"):
+def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=True, title="Cluster Tree Boundary", path='results'):
     cmap = plt.colormaps.get_cmap('PuBuGn')
 
     # Transform the data to a 2D space
@@ -206,7 +206,7 @@ def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=True, titl
     plt.xticks([])
     plt.yticks([])
     plt.title("Approximation Ratio: %.2f" % (cluster_tree.score(x_data_orig) / -kmeans.score(x_data_orig)), fontsize=14)
-    plt.savefig(os.path.join("results", title.lower().replace(" ", "_") + ".png"))
+    plt.savefig(os.path.join(path, title.lower().replace(" ", "_") + ".png"))
     plt.show()
     
 def plot_confusion_matrix(y_true, y_pred, classes,

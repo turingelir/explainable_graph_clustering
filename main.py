@@ -138,6 +138,10 @@ def experiment_exkmc(data, args):
         Returns:
             :return res: Result dictionary.
     """
+    # Set save path
+    folder_path = os.path.join(args['save_path'], data['dataset_name'], 'ExKMC_'+data['node_rep'])
+    if not os.path.exists(folder_path):
+        os.makedirs(folder_path)
     # Results dictionary
     res = {}
     # ExKMC clustering
@@ -146,7 +150,7 @@ def experiment_exkmc(data, args):
     x = data[data['node_rep']].squeeze().detach().numpy()
     # Visualize tree
     if 'visualize' in args['modes']:
-        baseline.fit_and_plot_exkmc(x, title= data['dataset_name'] + data['node_rep'] + ' ExKMC')
+        baseline.fit_and_plot_exkmc(x, title= data['dataset_name'] + ' ' + data['node_rep'] + ' ExKMC', path=folder_path)
     else:
         baseline.fit(x)
     # Clustering predictions
@@ -283,7 +287,13 @@ def main(args):
     ####        3. Evaluation & Visualization        ####
     # Visualize graphs
     if 'graphs' in args['visualize']:
-        for dataset_name, data in datasets.items():
+        for dataset_name in datasets:
+            # Load data
+            if dataset_name == 'sim':
+                # Create graph data
+                data = graph
+            else:
+                data = get_community_dataloader(dataset_name)
             graph_adj = data['adj_matrix']
             # Graph adjacency matrix
             visualization.show_mat(graph_adj.squeeze(), dataset_name, show=args['show'], save=args['save'], 
@@ -311,7 +321,7 @@ if __name__ == '__main__':
             'save_path': os.path.join(os.getcwd(), 'results'),
             'show': False,
             'save': True,
-            'epochs': 2
+            'epochs': 1
             }
     assert not(args['modes'].count('fit') and args['modes'].count('load')), "Only fit or load mode can be selected at a time."
 
