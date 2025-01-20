@@ -11,7 +11,11 @@ import torch
 from graspologic.simulations import sbm
 from graspologic.plot import heatmap
 
-from spectral import SpectralEncoder
+import os
+import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
+from models import SpectralEncoder
 
 class IMMBaseline:
     def __init__(self, num_clusters=3, random_state=None):
