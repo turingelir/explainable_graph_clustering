@@ -66,26 +66,64 @@
 
 import os
 
+if 'results' not in os.listdir():
+    os.mkdir('results')
+
 import torch
+import numpy as np
 
 from models import SpectralEncoder
 from utils import visualization
 from functions import modularity_loss, min_cut_loss, clustering_regularizer, generate_graph
 
-def experiment(data, method, obj_func, visualize, eval):
+from gnn_test import train_community_detection
+
+def exp_GNN(data, obj_func, args):
     r"""
-        This method is the main experiment method for the project.
+        Method for GNN experiment.
+    """
+    # Call GNN training method
+    if 'train' in args['modes']:
+        res = train_community_detection(data, criterion=obj_func, return_dict=True)
+    
+    return res
+
+def experiment(data, method_name, args):
+    r"""
+        This method is the main general experiment method for the project.
         Given a graph sample data, a method is applied and results are evaluated.
         Each method returns a clustering prediction result, performance metrics and model parameters.
+        These results are saved to disk for later evaluation.
+        According to visualization and evaluation modes, the results are displayed.
+        Args:
+            :arg data: Graph data sample.
+            :arg method_name: Method name to apply on data.
+            :arg args: Arguments dictionary.
     """
-    # Data
-    # Graph data
-    adj = data['adj']
-    s = data['s']
-    x = data['x']
-    # Graph data dimensions
-    n_samples, n_nodes, n_features = x.size()
-    n_clusters = s.size(-1)
+    # Pass data to appropriate method experiment method.
+    if method_name == 'GNN':
+        # Call GNN experiment method
+        res = exp_GNN(data, args['obj_funcs'][0], args)
+    elif method_name == 'IterativeGreedy':
+        # Call IterativeGreedy experiment method
+        pass
+    elif method_name == 'ExKMC':
+        # Call baseline ExKMC methods (K-means, Trees, K-means w/ surrogate cost)
+        pass
+    else:
+        raise NotImplementedError(f"Method {method_name} is not implemented.")
+    
+    # Save results to disk
+    for key, val in res.items():
+        # Check val data type and save accordingly
+        if isinstance(val, torch.Tensor):
+            torch.save(val, os.path.join(args['save_path'], f"{method_name}_{key}.pt"))
+        elif isinstance(val, np.ndarray):
+            np.save(os.path.join(args['save_path'], f"{method_name}_{key}.npy"), val)
+        else:
+            with open(os.path.join(args['save_path'], f"{method_name}_{key}.txt"), 'w') as f:
+                f.write(val)
+
     
 
 def main(args):
@@ -100,6 +138,10 @@ def main(args):
 
     ####        2. Experiment(s)        ####
     # Call experiment method over each dataset and method 
+    for dataset_name, data in datasets.items():
+        for method_name in args['methods']:
+            experiment(data, method_name, args)
+                
 
 
 if __name__ == '__main__':
@@ -110,12 +152,13 @@ if __name__ == '__main__':
     args = {'modes': ['eval', 'visualize'], # 'train', 
             'methods': ['GNN', 'IterativeGreedy', 'ExKMC'], 
             'datasets': ['sim'], # 'Citeseer', 'Amazon', 
-            'obj_funcs': ['modularity'], # 'min-cut' 
+            'obj_funcs': [modularity_loss], # 'min-cut' 
             'baselines': ['K-means', 'Trees', 'K-means w/ surrogate cost'],
             'visualize': ['graphs', 'predictions', 'performance'],
             'eval': ['V-measure', 'NMI'],
             'dim_red': ['PCA'], # 't-SNE'
-            'device': 'cuda' if torch.cuda.is_available() else 'cpu'
+            'device': 'cuda' if torch.cuda.is_available() else 'cpu',
+            'save_path': os.path.join(os.getcwd(), 'results'),
             }
     # Call main method
     main(args)
