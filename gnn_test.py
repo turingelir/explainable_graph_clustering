@@ -206,7 +206,8 @@ class CommDetGNN(Module):
         return s
 
 def train_community_detection(data, device='cuda' if torch.cuda.is_available() else 'cpu',
-                            lr=0.005, epochs=200, patience=10):
+                            lr=0.005, epochs=200, patience=10, 
+                            criterion=modularity_loss, return_dict=False):
     """
     Train the community detection model on the provided dataset.
     
@@ -263,7 +264,7 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
         communities = model(node_features, adj_matrix)
         
         # Calculate loss (negative modularity as we want to maximize modularity)
-        loss = modularity_loss(adj_matrix, communities)
+        loss = criterion(adj_matrix, communities)
         
         # Backward pass
         optimizer.zero_grad()
@@ -285,7 +286,15 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
             
         if epoch % 10 == 0:
             print(f'Epoch {epoch}: Loss = {loss.item():.4f}')
-    
+
+    # Save results to dict
+    res = {
+        'model': model.state_dict(),
+        'best_partition': best_partition,
+        'best_loss': -best_loss # Return positive modularity
+    }
+    if return_dict:
+        return res
     return best_partition, -best_loss  # Return positive modularity
         
 if __name__ == '__main__':
