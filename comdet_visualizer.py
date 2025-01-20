@@ -73,6 +73,112 @@ class CommunityVisualizer:
             plt.savefig(save_path, bbox_inches='tight')
         plt.show()
         plt.close()
+
+    def plot_scatter_comparison(self, figsize=(12, 8), save_path=None):
+        """
+        Create a single scatter plot comparing predicted communities with ground truth labels
+        using t-SNE embeddings of node features. Uses different markers for predictions and ground truth.
+        """
+        if self.ground_truth_labels is None:
+            raise ValueError("Ground truth labels are required for comparison visualization")
+            
+        # Convert labels to integers
+        if len(self.ground_truth_labels.shape) > 1:
+            ground_truth = np.argmax(self.ground_truth_labels, axis=1)
+        else:
+            ground_truth = self.ground_truth_labels.astype(int)
+        
+        communities = self.communities.astype(int)
+        
+        # Compute t-SNE embedding
+        from sklearn.manifold import TSNE
+        tsne = TSNE(n_components=2, random_state=42)
+        embedding = tsne.fit_transform(self.node_features)
+        
+        # Create figure
+        fig, ax = plt.subplots(figsize=figsize)
+        
+        # Calculate correct predictions mask
+        correct_predictions = communities == ground_truth
+        
+        # Plot incorrect predictions first (less emphasis)
+        incorrect_mask = ~correct_predictions
+        scatter_pred = ax.scatter(embedding[incorrect_mask, 0], embedding[incorrect_mask, 1], 
+                                c=communities[incorrect_mask], marker='o', 
+                                alpha=0.6, s=100, cmap='tab10',
+                                label='Predicted (incorrect)')
+        scatter_truth = ax.scatter(embedding[incorrect_mask, 0], embedding[incorrect_mask, 1], 
+                                c=ground_truth[incorrect_mask], marker='x', 
+                                alpha=0.6, s=100, cmap='tab10',
+                                label='Ground Truth')
+        
+        # Plot correct predictions (more emphasis)
+        correct_mask = correct_predictions
+        scatter_correct = ax.scatter(embedding[correct_mask, 0], embedding[correct_mask, 1], 
+                                c=communities[correct_mask], marker='o',
+                                alpha=1.0, s=100, cmap='tab10',
+                                label='Correct Predictions')
+        
+        ax.set_title('Node Embeddings: Predicted vs Ground Truth Communities')
+        ax.set_xlabel('t-SNE 1')
+        ax.set_ylabel('t-SNE 2')
+        
+        # Add legend
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        
+        # Add accuracy information
+        accuracy = np.mean(correct_predictions) * 100
+        plt.text(0.02, 0.98, f'Accuracy: {accuracy:.1f}%', 
+                transform=ax.transAxes, bbox=dict(facecolor='white', alpha=0.8))
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.show()
+        plt.close()
+
+    def plot_confusion_matrix(self, figsize=(10, 8), save_path=None):
+        """Plot confusion matrix between predicted and ground truth communities"""
+        if self.ground_truth_labels is None:
+            raise ValueError("Ground truth labels are required for confusion matrix")
+        
+        # Convert labels to integers and get unique values
+        if len(self.ground_truth_labels.shape) > 1:
+            ground_truth = np.argmax(self.ground_truth_labels, axis=1)
+        else:
+            ground_truth = self.ground_truth_labels.astype(int)
+        
+        communities = self.communities.astype(int)
+        
+        # Get unique labels and create mappings
+        pred_labels = sorted(np.unique(communities))
+        true_labels = sorted(np.unique(ground_truth))
+        
+        # Create confusion matrix
+        conf_matrix = np.zeros((len(true_labels), len(pred_labels)))
+        for i in range(len(communities)):
+            pred_idx = pred_labels.index(communities[i])
+            true_idx = true_labels.index(ground_truth[i])
+            conf_matrix[true_idx, pred_idx] += 1
+        
+        # Normalize by row (ground truth)
+        conf_matrix_norm = conf_matrix / conf_matrix.sum(axis=1, keepdims=True)
+        
+        # Create heatmap
+        fig, ax = plt.subplots(figsize=figsize)
+        sns.heatmap(conf_matrix_norm, annot=True, fmt='.2f', cmap='YlOrRd',
+                    xticklabels=[f'Pred {i}' for i in pred_labels],
+                    yticklabels=[f'True {i}' for i in true_labels])
+        
+        plt.title('Normalized Confusion Matrix\nGround Truth vs Predicted Communities')
+        plt.xlabel('Predicted Community')
+        plt.ylabel('Ground Truth Community')
+        
+        if save_path:
+            plt.savefig(save_path, bbox_inches='tight', dpi=300)
+        plt.show()
+        plt.close()
         
     def plot_feature_embedding(self, figsize=(10, 10), save_path=None):
         """Plot t-SNE embedding of node features colored by community"""
@@ -411,6 +517,19 @@ def analyze_community_results(data, dataset_name, communities, ground_truth_labe
     fig = visualizer.plot_interactive_graph(
         save_path=f"{save_dir}/{dataset_name}_interactive_graph.html" if save_dir else None
     )
+    
+    
+    # Generate scatter plot comparison if ground truth is available
+    if ground_truth_labels is not None:
+        print("\n=== Generating Scatter Plot Comparison ===")
+        visualizer.plot_scatter_comparison(
+            save_path=f"{save_dir}/{dataset_name}_scatter_comparison.png" if save_dir else None
+        )
+        
+        # Confusion matrix
+        visualizer.plot_confusion_matrix(
+            save_path=f"{save_dir}/{dataset_name}_confusion_matrix.png" if save_dir else None
+        )
     
     return visualizer, metrics, fig
 
