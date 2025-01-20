@@ -87,9 +87,9 @@ def exp_GNN(data, obj_func, args):
             Add loading ready GNN for only testing
     """
     # Call GNN training method
-    if 'train' in args['modes']:
+    if 'fit' in args['modes']:
         res = train_community_detection(data, criterion=obj_func, return_dict=True)
-    else:
+    else: # TODO: Load GNN model and test
         res = {}
     return res
 
@@ -188,13 +188,25 @@ def main(args):
         # Baseline methods only work on sample x features data
         # So, we need to extract node embeddings or node features from data.
         # We can use SpectralEncoder for this purpose.
-        encoder = SpectralEncoder(data['num_communities'], norm_laplacian=True)
-        # Encode graph data
-        data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'])
+        # If we are using baselines, encode graph data
+        if len(args['baselines']) > 0:
+            encoder = SpectralEncoder(data['num_communities'], norm_laplacian=True)
+            # Encode graph data
+            data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'])
         
         # Do experiment for each method
-        for method_name in args['methods']:
+        # Seperate community detection methods and baselines
+        comm_det_methods = [method_name for method_name in args['methods'] if method_name not in args['baselines']]
+        baselines = [method_name for method_name in args['methods'] if method_name in args['baselines']]
+        # Community detection methods
+        for method_name in comm_det_methods:
             results[(dataset_name, method_name)] = experiment(data, method_name, args)
+        # Baseline clustering methods
+        for method_name in baselines:
+            # Do experiment for each node representation type: embeddings, features
+            for node_rep in args['node_rep']:
+                only_node_data = data['node_embeddings'] if node_rep == 'embeddings' else data['node_features']
+                results[(dataset_name, method_name + '_' + node_rep)] = experiment(only_node_data, method_name, args)
 
     # Save results to disk
     save_results(results, args['save_path'])
@@ -217,7 +229,7 @@ if __name__ == '__main__':
     torch.manual_seed(0)
 
     # Take arguments
-    args = {'modes': ['eval', 'visualize'], # 'train', 
+    args = {'modes': ['fit', 'eval', 'visualize', ], # 'load', 
             'methods': ['GNN', 'IterativeGreedy', 'K-means', 'IMM', 'ExKMC'], 
             'baselines': ['K-means', 'IMM', 'ExKMC'],
             'node_rep': ['embeddings', 'features'],
@@ -229,8 +241,9 @@ if __name__ == '__main__':
             'device': 'cuda' if torch.cuda.is_available() else 'cpu',
             'save_path': os.path.join(os.getcwd(), 'results'),
             'show': False,
-            'save': True,
-            'load': False # Can be a dict of paths for each method, dataset
+            'save': True
             }
+    assert not(args['modes']['fit'] and args['modes']['load']), "Only fit or load mode can be selected at a time."
+
     # Call main method
     main(args)
