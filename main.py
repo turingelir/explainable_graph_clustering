@@ -218,8 +218,8 @@ def save_results(results, path):
             # Torch tensor
             if isinstance(val, torch.Tensor) or isinstance(val, torch.nn.Module):
                 torch.save(val, os.path.join(folder_path, f"{method_name}_{key}.pt"))
-            # Numpy array
-            elif isinstance(val, np.ndarray):
+            # Numpy array or generic data type
+            elif isinstance(val, np.ndarray) or isinstance(val, np.generic):
                 np.save(os.path.join(folder_path, f"{method_name}_{key}.npy"), val)
             # Class object
             elif isinstance(val, object):
