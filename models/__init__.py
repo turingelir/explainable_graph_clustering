@@ -4,6 +4,7 @@ from .mcmc import *
 from .greedy import *
 from .clustering import *
 from .spectral import *
+from .exkmc import *
 
 """
     This python module contains methods for community detection and graph clustering tasks.

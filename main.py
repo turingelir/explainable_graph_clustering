@@ -81,9 +81,9 @@ from sklearn.manifold import TSNE
 from graspologic.plot import heatmap
 
 # Import project modules
-from models import SpectralEncoder, exkmc
+from models import SpectralEncoder, ExKMCBaseline
 from utils import visualization
-from functions import modularity_loss, min_cut_loss, clustering_regularizer, generate_graph
+from functions import modularity_loss, min_cut_loss, clustering_regularization, generate_graph
 
 from gnn_test import train_community_detection
 from datasets import get_community_dataloader
@@ -116,7 +116,7 @@ def experiment_kmeans(data, args):
     res = {}
     # K-means clustering
     kmeans = KMeans(n_clusters=data['num_communities'], random_state=0)
-    kmeans.fit(data[data['node_rep']])
+    kmeans.fit(data[data['node_rep']].squeeze())
     # Clustering predictions
     res['prediction'] = kmeans.labels_
 
@@ -138,12 +138,12 @@ def experiment_exkmc(data, args):
     # Results dictionary
     res = {}
     # ExKMC clustering
-    exkmc = exkmc.ExKMCBaseline(num_clusters=data['num_communities'], num_components=data['num_communities'], random_state=0)
+    baseline = ExKMCBaseline(num_clusters=data['num_communities'], num_components=data['num_communities'], random_state=0)
     # Visualize tree
     if 'visualize' in args['modes']:
-        exkmc.fit_and_plot_exkmc(data[data['node_rep']], title= data['dataset_name'] + data['node_rep'] + ' ExKMC')
+        baseline.fit_and_plot_exkmc(data[data['node_rep']], title= data['dataset_name'] + data['node_rep'] + ' ExKMC')
     else:
-        exkmc.fit(data[data['node_rep']])
+        baseline.fit(data[data['node_rep']].squeeze())
     # Clustering predictions
     res['prediction'] = exkmc.labels_
 
@@ -253,7 +253,7 @@ def main(args):
         if len(args['baselines']) > 0:
             encoder = SpectralEncoder(data['num_communities'], norm_laplacian=True)
             # Encode graph data
-            data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'])
+            data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'].squeeze()).unsqueeze(0)
         
         # Do experiment for each method
         # Seperate community detection methods and baselines
@@ -305,7 +305,7 @@ if __name__ == '__main__':
             'show': False,
             'save': True
             }
-    assert not(args['modes']['fit'] and args['modes']['load']), "Only fit or load mode can be selected at a time."
+    assert not(args['modes'].count('fit') and args['modes'].count('load')), "Only fit or load mode can be selected at a time."
 
     # Call main method
     main(args)
