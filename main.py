@@ -68,9 +68,42 @@ import os
 
 import torch
 
+from models import SpectralEncoder
+from utils import visualization
+from functions import modularity_loss, min_cut_loss, clustering_regularizer, generate_graph
+
+def main(args):
+    ####        1. Data        ####
+    # Create list of dataloaders.
+    # dataloaders = [Citeseer, Amazon, sim(?), ..., etc.]
+    # TODO: SBM generated graph for now
+    graph = generate_graph()
+    
+    # Datasets list 
+    datasets = {'sim': graph}
+
+    ####        2. Experiment(s)        ####
+    # 2.1. Community detection methods
+    # List of obj functions. 
+    obj_funcs = {'modularity': modularity_loss} 
+
+    # First method: GNN
+    # Call GNN training, testing method.
+    
+
 if __name__ == '__main__':
     # Set random seed
     torch.manual_seed(0)
 
     # Take arguments
-    
+    args = {'modes': ['eval', 'visualize'], # 'train', 
+            'methods': ['GNN', 'IterativeGreedy', 'ExKMC'], 
+            'datasets': ['sim'], # 'Citeseer', 'Amazon', 
+            'obj_funcs': ['modularity'], # 'min-cut' 
+            'baselines': ['K-means', 'Trees', 'K-means w/ surrogate cost'],
+            'visualize': ['graphs', 'predictions', 'performance'],
+            'eval': ['V-measure', 'NMI'],
+            'dim_red': ['PCA'], # 't-SNE'
+            }
+    # Call main method
+    main(args)
