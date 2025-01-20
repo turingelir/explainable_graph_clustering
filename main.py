@@ -83,7 +83,7 @@ from graspologic.plot import heatmap
 # Import project modules
 from models import SpectralEncoder, ExKMCBaseline
 from utils import visualization
-from functions import modularity_loss, min_cut_loss, clustering_regularization, generate_graph
+from functions import modularity_loss, min_cut_loss, clustering_regularization, generate_graph, cluster_edges
 
 from gnn_test import train_community_detection
 from datasets import get_community_dataloader
@@ -225,6 +225,10 @@ def save_results(results, path):
             # Numpy array or generic data type
             elif isinstance(val, np.ndarray) or isinstance(val, np.generic):
                 np.save(os.path.join(folder_path, f"{method_name}_{key}.npy"), val)
+            # Generic data type
+            elif isinstance(val, (int, float, str)):
+                with open(os.path.join(folder_path, f"{method_name}_{key}.txt"), 'w') as f:
+                    f.write(str(val)) 
             # Class object
             elif isinstance(val, object):
                 with open(os.path.join(folder_path, f"{method_name}_{key}.pkl"), 'wb') as f:
@@ -294,12 +298,20 @@ def main(args):
                 data = graph
             else:
                 data = get_community_dataloader(dataset_name)
-            graph_adj = data['adj_matrix']
+            graph_adj = data['adj_matrix'].squeeze()
+            cluster_labels = data['initial_communities'].squeeze()
             # Graph adjacency matrix
-            visualization.show_mat(graph_adj.squeeze(), dataset_name, show=args['show'], save=args['save'], 
-                                   save_path=os.path.join(args['save_path'], dataset_name), cmap='binary')
-            # Graph block-model
-            
+            visualization.show_mat(graph_adj, show=args['show'], save=args['save'], 
+                                   title=dataset_name + ' Graph',
+                                   save_path=args['save_path'], cmap='binary')                        
+            # Graph block model
+            aggr_graph = cluster_edges(data['adj_matrix'], data['initial_communities']).squeeze()
+            # Normalize each block by the number of possible edges of each block
+            aggr_pot = cluster_labels.sum(dim=0).unsqueeze(1) @ cluster_labels.sum(dim=0).unsqueeze(0)
+            block_graph = aggr_graph / aggr_pot
+            visualization.show_mat(block_graph, dataset_name + ' Block Model', show=args['show'], save=args['save'], 
+                                   save_path=args['save_path'], cmap='viridis')
+
             
 
 
@@ -309,8 +321,8 @@ if __name__ == '__main__':
 
     # Take arguments
     args = {'modes': ['fit', 'eval', 'visualize', ], # 'load', 
-            'methods': ['GNN', 'K-means', 'ExKMC'], # 'IterativeGreedy', 'IMM',
-            'baselines': ['K-means', 'ExKMC'], # 'IMM', 
+            'methods': [], # 'GNN', 'K-means', 'ExKMC' ; 'IterativeGreedy', 'IMM',
+            'baselines': [], # 'K-means', 'ExKMC' ; 'IMM', 
             'node_rep': ['node_embeddings', 'node_features'],
             'datasets': ['sim'], # 'Citeseer', 'Amazon', 
             'obj_funcs': [modularity_loss], # 'min-cut' 

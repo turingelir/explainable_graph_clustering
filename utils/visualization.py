@@ -22,7 +22,7 @@ def show_mat(mat, title: str, show: bool = False, return_fig: bool = False, save
     if show:
         plt.show()
     if save and save_path is not None:
-        plt.savefig(opj(save_path, title + '.png'))
+        plt.savefig(opj(save_path, title.lower().replace(" ", "_") + '.png'))
     if return_fig:
         return plt
     else:
