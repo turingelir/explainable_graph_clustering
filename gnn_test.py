@@ -289,7 +289,7 @@ def train_community_detection(data, device='cuda' if torch.cuda.is_available() e
 
     # Save results to dict
     res = {
-        'param': model.state_dict(),
+        'model': model.state_dict(),
         'prediction': best_partition,
         'best_loss': -best_loss # Return positive modularity
     }

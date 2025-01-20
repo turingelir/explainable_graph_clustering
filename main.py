@@ -96,7 +96,7 @@ def experiment_GNN(data, obj_func, args):
     """
     # Call GNN training method
     if 'fit' in args['modes']:
-        res = train_community_detection(data, criterion=obj_func, return_dict=True)
+        res = train_community_detection(data, criterion=obj_func, return_dict=True, epochs=args['epochs'], device=args['device'])
     else: # TODO: Load GNN model and test
         res = {}
     return res
@@ -310,7 +310,8 @@ if __name__ == '__main__':
             'device': 'cuda' if torch.cuda.is_available() else 'cpu',
             'save_path': os.path.join(os.getcwd(), 'results'),
             'show': False,
-            'save': True
+            'save': True,
+            'epochs': 2
             }
     assert not(args['modes'].count('fit') and args['modes'].count('load')), "Only fit or load mode can be selected at a time."
 
