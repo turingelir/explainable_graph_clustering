@@ -63,7 +63,6 @@
                 - Bar-plots may be used.
 
 """
-
 import os
 
 if 'results' not in os.listdir():
@@ -73,14 +72,23 @@ import torch
 import numpy as np
 import pickle
 
-from models import SpectralEncoder
+# Import baseline methods
+from sklearn.cluster import KMeans
+from sklearn.metrics import normalized_mutual_info_score, v_measure_score
+from sklearn.decomposition import PCA
+from sklearn.manifold import TSNE
+
+from graspologic.plot import heatmap
+
+# Import project modules
+from models import SpectralEncoder, exkmc
 from utils import visualization
 from functions import modularity_loss, min_cut_loss, clustering_regularizer, generate_graph
 
 from gnn_test import train_community_detection
 from datasets import get_community_dataloader
 
-def exp_GNN(data, obj_func, args):
+def experiment_GNN(data, obj_func, args):
     r"""
         Method for GNN experiment.
         TODO:
@@ -92,6 +100,24 @@ def exp_GNN(data, obj_func, args):
     else: # TODO: Load GNN model and test
         res = {}
     return res
+
+def experiment_kmeans(data, args):
+    r"""
+        Method for K-means experiment.
+        Given samples x features data, apply K-means clustering.
+        Output returns clustering predictions, performance metrics and model parameters.
+        Args:
+            :arg data: Node embeddings or node features data.
+            :arg args: Arguments dictionary.
+        Returns:
+            :return res: Result dictionary.
+    """
+    # Results dictionary
+    res = {}
+    # K-means clustering
+    kmeans = KMeans(n_clusters=data['num_communities'], random_state=0)
+    kmeans.fit(data[data['node_rep']])
+
 
 def experiment(data, method_name, args):
     r"""
@@ -111,13 +137,13 @@ def experiment(data, method_name, args):
     # Pass data to appropriate method experiment.
     if method_name == 'GNN':
         # Call GNN method
-        res = exp_GNN(data, args['obj_funcs'][0], args)
+        res = experiment_GNN(data, args['obj_funcs'][0], args)
     elif method_name == 'IterativeGreedy':
         # Call IterativeGreedy method
         pass
     elif method_name == 'K-means':
         # Call K-means method
-        pass
+        res = experiment_kmeans(data, args)
     elif method_name == 'IMM':
         # Call Trees method
         pass
@@ -205,8 +231,9 @@ def main(args):
         for method_name in baselines:
             # Do experiment for each node representation type: embeddings, features
             for node_rep in args['node_rep']:
-                only_node_data = data['node_embeddings'] if node_rep == 'embeddings' else data['node_features']
-                results[(dataset_name, method_name + '_' + node_rep)] = experiment(only_node_data, method_name, args)
+                # Give what node representation to use
+                data['node_rep'] = node_rep
+                results[(dataset_name, method_name + '_' + node_rep)] = experiment(data, method_name, args)
 
     # Save results to disk
     save_results(results, args['save_path'])
@@ -230,9 +257,9 @@ if __name__ == '__main__':
 
     # Take arguments
     args = {'modes': ['fit', 'eval', 'visualize', ], # 'load', 
-            'methods': ['GNN', 'IterativeGreedy', 'K-means', 'IMM', 'ExKMC'], 
-            'baselines': ['K-means', 'IMM', 'ExKMC'],
-            'node_rep': ['embeddings', 'features'],
+            'methods': ['GNN', 'K-means', 'ExKMC'], # 'IterativeGreedy', 'IMM',
+            'baselines': ['K-means', 'ExKMC'], # 'IMM', 
+            'node_rep': ['node_embeddings', 'node_features'],
             'datasets': ['sim'], # 'Citeseer', 'Amazon', 
             'obj_funcs': [modularity_loss], # 'min-cut' 
             'visualize': ['graphs', 'predictions', 'performance'],
