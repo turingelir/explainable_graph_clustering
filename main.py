@@ -123,29 +123,41 @@ def experiment(data, method_name, args):
     else:
         raise NotImplementedError(f"Method {method_name} is not implemented.")
     
-    # Save results to disk
-    for key, val in res.items():
-        # Check val data type and save accordingly
-        # Torch tensor
-        if isinstance(val, torch.Tensor):
-            torch.save(val, os.path.join(args['save_path'], f"{method_name}_{key}.pt"))
-        # Numpy array
-        elif isinstance(val, np.ndarray):
-            np.save(os.path.join(args['save_path'], f"{method_name}_{key}.npy"), val)
-        # Class object
-        elif isinstance(val, object):
-            with open(os.path.join(args['save_path'], f"{method_name}_{key}.pkl"), 'wb') as f:
-                pickle.dump(val, f)
-        else:
-            with open(os.path.join(args['save_path'], f"{method_name}_{key}.txt"), 'w') as f:
-                f.write(val)
+    return res
 
-    # Evaluation
-    if 'eval' in args['modes']:
-        # Call evaluation method
-        pass
-
-    
+def save_results(results, path):
+    r"""
+        Save results dictionary elements to disk.
+        Create seperate folders for each dataset and method.
+        Save results as pickle files for later evaluation.
+        Args:
+            :arg results: Results dictionary.
+                Where key is (dataset_name, method_name) tuple.
+                and value is the result dictionary.
+            :arg args: Arguments dictionary.
+    """
+    # Create folders for each dataset and method
+    for (dataset_name, method_name), res in results.items():
+        folder_path = os.path.join(path, dataset_name, method_name)
+        if not os.path.exists(folder_path):
+            os.makedirs(folder_path)
+        # Iterate over result dictionary and save each element
+        for key, val in res.items():
+            # Save results to disk
+            # Check val data type and save accordingly
+            # Torch tensor
+            if isinstance(val, torch.Tensor):
+                torch.save(val, os.path.join(folder_path, f"{method_name}_{key}.pt"))
+            # Numpy array
+            elif isinstance(val, np.ndarray):
+                np.save(os.path.join(folder_path, f"{method_name}_{key}.npy"), val)
+            # Class object
+            elif isinstance(val, object):
+                with open(os.path.join(folder_path, f"{method_name}_{key}.pkl"), 'wb') as f:
+                    pickle.dump(val, f)
+            else:
+                with open(os.path.join(folder_path, f"{method_name}_{key}.txt"), 'w') as f:
+                    f.write(val)
 
 def main(args):
     ####        1. Data        ####
@@ -158,10 +170,14 @@ def main(args):
     datasets = {'sim': graph}
 
     ####        2. Experiment(s)        ####
+    # Results dictionary
+    results = {}
     # Call experiment method over each dataset and method 
     for dataset_name, data in datasets.items():
         for method_name in args['methods']:
-            experiment(data, method_name, args)
+            results[(dataset_name, method_name)] = experiment(data, method_name, args)
+    # Save results to disk
+    save_results(results, args['save_path'])
                 
 
 
