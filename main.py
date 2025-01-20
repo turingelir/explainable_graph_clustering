@@ -118,7 +118,7 @@ def experiment(data, method_name, args):
     elif method_name == 'K-means':
         # Call K-means method
         pass
-    elif method_name == 'Trees':
+    elif method_name == 'IMM':
         # Call Trees method
         pass
     elif method_name == 'ExKMC':
@@ -150,7 +150,7 @@ def save_results(results, path):
             # Save results to disk
             # Check val data type and save accordingly
             # Torch tensor
-            if isinstance(val, torch.Tensor):
+            if isinstance(val, torch.Tensor) or isinstance(val, torch.nn.Module):
                 torch.save(val, os.path.join(folder_path, f"{method_name}_{key}.pt"))
             # Numpy array
             elif isinstance(val, np.ndarray):
@@ -190,10 +190,12 @@ def main(args):
         # We can use SpectralEncoder for this purpose.
         encoder = SpectralEncoder(data['num_communities'], norm_laplacian=True)
         # Encode graph data
-        node_embeddings = encoder().fit
+        data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'])
         
+        # Do experiment for each method
         for method_name in args['methods']:
             results[(dataset_name, method_name)] = experiment(data, method_name, args)
+
     # Save results to disk
     save_results(results, args['save_path'])
 
@@ -216,7 +218,8 @@ if __name__ == '__main__':
 
     # Take arguments
     args = {'modes': ['eval', 'visualize'], # 'train', 
-            'methods': ['GNN', 'IterativeGreedy', 'K-means', 'Trees', 'ExKMC'], 
+            'methods': ['GNN', 'IterativeGreedy', 'K-means', 'IMM', 'ExKMC'], 
+            'baselines': ['K-means', 'IMM', 'ExKMC'],
             'node_rep': ['embeddings', 'features'],
             'datasets': ['sim'], # 'Citeseer', 'Amazon', 
             'obj_funcs': [modularity_loss], # 'min-cut' 
