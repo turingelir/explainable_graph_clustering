@@ -101,8 +101,8 @@ def generate_graph(n_samples: int=1, n_nodes: int=300, n_clusters: int=3,
                    cluster_counts: List[int]=None, conn_prob: List[List[float]]=None,
                    node_features: int=2, cluster_means: List[List[float]]=None, 
                    cluster_covs: List[List[List[float]]]=None,
-                   random_order: bool=True
-                   ) -> Tuple[Tensor, Tensor, Tensor]:
+                   random_order: bool=True, return_dict: bool=True
+                   ) -> Union[Tuple[Tensor, Tensor, Tensor], dict]:
     r"""
         Generate graph data randomly.
         Args:
@@ -115,6 +115,7 @@ def generate_graph(n_samples: int=1, n_nodes: int=300, n_clusters: int=3,
             :arg cluster_means: Mean values for each cluster.
             :arg cluster_covs: Covariance matrices for each cluster.
             :arg random_order: Randomize cluster assignments.
+            :arg return_dict: Return as dictionary or tensors.
         Returns:
             :return nodes: Node feature tensor of shape [B, N, F].
             :return graph: Adjacency matrix tensor of shape [B, N, N].
@@ -169,7 +170,16 @@ def generate_graph(n_samples: int=1, n_nodes: int=300, n_clusters: int=3,
     nodes = nodes.unsqueeze(0)
     partition = partition.unsqueeze(0)
 
-    return nodes, graph, partition
+    if return_dict:
+        return {
+            'adj_matrix': graph,
+            'node_features': nodes,
+            'initial_communities': partition,
+            'num_communities': n_clusters
+        }
+    else:
+        return nodes, graph, partition
+    
     
 
 if __name__ == "__main__":

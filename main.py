@@ -72,6 +72,22 @@ from models import SpectralEncoder
 from utils import visualization
 from functions import modularity_loss, min_cut_loss, clustering_regularizer, generate_graph
 
+def experiment(data, method, obj_func, visualize, eval):
+    r"""
+        This method is the main experiment method for the project.
+        Given a graph sample data, a method is applied and results are evaluated.
+        Each method returns a clustering prediction result, performance metrics and model parameters.
+    """
+    # Data
+    # Graph data
+    adj = data['adj']
+    s = data['s']
+    x = data['x']
+    # Graph data dimensions
+    n_samples, n_nodes, n_features = x.size()
+    n_clusters = s.size(-1)
+    
+
 def main(args):
     ####        1. Data        ####
     # Create list of dataloaders.
@@ -83,13 +99,8 @@ def main(args):
     datasets = {'sim': graph}
 
     ####        2. Experiment(s)        ####
-    # 2.1. Community detection methods
-    # List of obj functions. 
-    obj_funcs = {'modularity': modularity_loss} 
+    # Call experiment method over each dataset and method 
 
-    # First method: GNN
-    # Call GNN training, testing method.
-    
 
 if __name__ == '__main__':
     # Set random seed
@@ -104,6 +115,7 @@ if __name__ == '__main__':
             'visualize': ['graphs', 'predictions', 'performance'],
             'eval': ['V-measure', 'NMI'],
             'dim_red': ['PCA'], # 't-SNE'
+            'device': 'cuda' if torch.cuda.is_available() else 'cpu'
             }
     # Call main method
     main(args)
