@@ -149,3 +149,18 @@ class SpectralEncoder:
         return self.eigenvectors_
 
 
+if __name__ == "__main__":
+    # Example
+    # Create a random graph
+    A = torch.randint(0, 2, (10, 10)).float()
+    A = (A + A.t()) / 2  # Make the adjacency matrix symmetric
+
+    # Compute the spectral embedding
+    spectral = SpectralEncoder(n_clusters=3, norm_laplacian=False)
+    embedding = spectral.fit_transform(A)
+    print(embedding)
+
+    # With normalization
+    spectral = SpectralEncoder(n_clusters=3, norm_laplacian=True)
+    embedding = spectral.fit_transform(A)
+    print(embedding)

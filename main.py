@@ -120,11 +120,11 @@ def experiment_kmeans(data, args):
     # Clustering predictions
     res['prediction'] = kmeans.labels_
 
-    res['param'] = kmeans.cluster_centers_
+    res['model'] = kmeans
 
     return res
 
-def experiment_xkmc(data, args):
+def experiment_exkmc(data, args):
     r"""
         Method for ExKMC experiment.
         Given samples x features data, apply ExKMC clustering.
@@ -141,13 +141,13 @@ def experiment_xkmc(data, args):
     exkmc = exkmc.ExKMCBaseline(num_clusters=data['num_communities'], num_components=data['num_communities'], random_state=0)
     # Visualize tree
     if 'visualize' in args['modes']:
-        exkmc.fit_and_plot_exkmc(data[data['node_rep']])
+        exkmc.fit_and_plot_exkmc(data[data['node_rep']], title= data['dataset_name'] + data['node_rep'] + ' ExKMC')
     else:
         exkmc.fit(data[data['node_rep']])
     # Clustering predictions
     res['prediction'] = exkmc.labels_
 
-    res['param'] = exkmc.kmeans.cluster_centers_
+    res['model'] = exkmc
 
     return res
 
@@ -182,7 +182,7 @@ def experiment(data, method_name, args):
         pass
     elif method_name == 'ExKMC':
         # Call ExKMC method
-        res = experiment_xkmc(data, args)
+        res = experiment_exkmc(data, args)
     else:
         raise NotImplementedError(f"Method {method_name} is not implemented.")
     
@@ -243,6 +243,8 @@ def main(args):
             data = graph
         else:
             data = get_community_dataloader(dataset_name)
+            # Add dataset name to data
+            data['dataset_name'] = dataset_name
 
         # Baseline methods only work on sample x features data
         # So, we need to extract node embeddings or node features from data.

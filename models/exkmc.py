@@ -6,6 +6,7 @@ import seaborn as sns
 import matplotlib.pyplot as plt
 from sklearn.metrics import confusion_matrix
 from sklearn.utils.multiclass import unique_labels
+from sklearn.decomposition import PCA
 import torch
 
 from graspologic.simulations import sbm
@@ -14,6 +15,8 @@ from graspologic.plot import heatmap
 import os
 import sys
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+if 'results' not in os.listdir():
+    os.mkdir('results')
 
 from models import SpectralEncoder
 
@@ -29,7 +32,7 @@ class IMMBaseline:
 
 
 class ExKMCBaseline:
-    def __init__(self, base, num_clusters=3, num_components=2, random_state=None):
+    def __init__(self, base, num_clusters=3, num_components=2, random_state=None, name="ExKMCBaseline"):
         if base == 'Spectral':
             self.base = SpectralEncoder(n_components=num_components)
         else:
@@ -42,6 +45,8 @@ class ExKMCBaseline:
         self.embeddings = None
         self.kmeans = KMeans(self.num_clusters, random_state=self.random_state)
         self.tree = Tree(self.num_clusters, 2*self.num_clusters)
+
+        self.name = name
     
     def create_graph(self):
         b, n_nodes, n_clusters = 1, 100, self.num_clusters
@@ -69,12 +74,12 @@ class ExKMCBaseline:
         # Display the graph
         heatmap(graph.squeeze(), title="Graph w/ 3 Clusters")
 
-        self.graph = torch.tensor(graph, dtype=torch.float32).unsqueeze(0)
+        self.graph = torch.tensor(graph, dtype=torch.float32)
     
     def fit_base(self):
         self.base = self.base.fit(self.graph)
         self.embeddings = self.base.get_embeddings().squeeze(0)
-        self.embeddings = self.embeddings.reshape(self.embeddings.shape[1], self.embeddings.shape[0])
+        # self.embeddings = self.embeddings.reshape(self.embeddings.shape[1], self.embeddings.shape[0])
 
         self.embeddings = self.embeddings.numpy().astype(np.double)
     
@@ -82,14 +87,14 @@ class ExKMCBaseline:
         self.kmeans.fit(x_data)
         self.tree.fit(x_data, self.kmeans)
 
-    def fit_and_plot_exkmc(self, x_data=None):
+    def fit_and_plot_exkmc(self, x_data=None, title="ExKMC Baseline"):
         self.kmeans.fit(x_data)
 
-        plot_kmeans(self.kmeans, x_data)
+        plot_kmeans(self.kmeans, x_data, title="K-Means Clustering")
         
         self.tree.fit(x_data, self.kmeans)
 
-        plot_tree_boundary(self.tree, self.num_clusters, x_data, self.kmeans, plot_mistakes=True)
+        plot_tree_boundary(self.tree, self.num_clusters, x_data, self.kmeans, plot_mistakes=True, title="Cluster Tree Boundary")
 
 
 def calc_cost(tree, k, x_data):
@@ -103,19 +108,34 @@ def calc_cost(tree, k, x_data):
                 cost += np.linalg.norm(x - center) ** 2
     return cost
 
-def plot_kmeans(kmeans, x_data):
-    cmap = plt.cm.get_cmap('PuBuGn')
+def plot_kmeans(kmeans, x_data, title="K-Means Clustering"):
+    r"""
+        Plot the K-Means clustering results.
+        Args:
+            kmeans : object
+                The KMeans object.
+            x_data : array-like of shape (n_samples, n_features)
+                The data to be clustered.
+    """
+    cmap = plt.colormaps.get_cmap('PuBuGn')
+
+    # Transform the data to a 2D space
+    pca = PCA(n_components=2)
+    x_data_orig = x_data.copy()
+    x_data = pca.fit_transform(x_data)
 
     k = kmeans.n_clusters
-    x_min, x_max = x_data[:, 0].min() - 1, x_data[:, 0].max() + 1
-    y_min, y_max = x_data[:, 1].min() - 1, x_data[:, 1].max() + 1
+    x_min, x_max = x_data[:, 0].min() - .1, x_data[:, 0].max() + .1
+    y_min, y_max = x_data[:, 1].min() - .1, x_data[:, 1].max() + .1
     xx, yy = np.meshgrid(np.arange(x_min, x_max, .1),
                          np.arange(y_min, y_max, .1))
 
     values = np.c_[xx.ravel(), yy.ravel()]
+    values = pca.inverse_transform(values)
 
     ########### K-MEANS Clustering ###########
     plt.figure(figsize=(4, 4))
+    
     Z = kmeans.predict(values)
     Z = Z.reshape(xx.shape)
     plt.imshow(Z, interpolation='nearest',
@@ -123,7 +143,7 @@ def plot_kmeans(kmeans, x_data):
                cmap=cmap,
                aspect='auto', origin='lower', alpha=0.4)
 
-    y_kmeans = kmeans.predict(x_data)
+    y_kmeans = kmeans.predict(x_data_orig)
     plt.scatter([x[0] for x in x_data], [x[1] for x in x_data], c=y_kmeans, s=20, edgecolors='black', cmap=cmap)
     for c in range(k):
         center = x_data[y_kmeans == c].mean(axis=0)
@@ -133,23 +153,31 @@ def plot_kmeans(kmeans, x_data):
     plt.xticks([])
     plt.yticks([])
     plt.title("Near Optimal Baseline", fontsize=14)
+    plt.savefig(os.path.join("results", title.lower().replace(" ", "_") + ".png"))
     plt.show()
     
-def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=False):
-    cmap = plt.cm.get_cmap('PuBuGn')
+def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=True, title="Cluster Tree Boundary"):
+    cmap = plt.colormaps.get_cmap('PuBuGn')
+
+    # Transform the data to a 2D space
+    pca = PCA(n_components=2)
+    x_data_orig = x_data.copy()
+    x_data = pca.fit_transform(x_data)
     
     ########### IMM leaves ###########
     plt.figure(figsize=(4, 4))
     
-    x_min, x_max = x_data[:, 0].min() - 1, x_data[:, 0].max() + 1
-    y_min, y_max = x_data[:, 1].min() - 1, x_data[:, 1].max() + 1
+    x_min, x_max = x_data[:, 0].min() - .1, x_data[:, 0].max() + .1
+    y_min, y_max = x_data[:, 1].min() - .1, x_data[:, 1].max() + .1
     xx, yy = np.meshgrid(np.arange(x_min, x_max, .1),
                          np.arange(y_min, y_max, .1))
 
     values = np.c_[xx.ravel(), yy.ravel()]
+    values = pca.inverse_transform(values)
     
-    y_cluster_tree = cluster_tree.predict(x_data)
+    y_cluster_tree = cluster_tree.predict(x_data_orig)
 
+    # Get the cluster assignments (n_samples,)
     Z = cluster_tree.predict(values)
     Z = Z.reshape(xx.shape)
     plt.imshow(Z, interpolation='nearest',
@@ -164,13 +192,14 @@ def plot_tree_boundary(cluster_tree, k, x_data, kmeans, plot_mistakes=False):
         plt.scatter([center[0]], [center[1]], c="white", marker='$%s$' % c, s=350, linewidths=.5, zorder=10, edgecolors='black')
         
     if plot_mistakes:
-        y = kmeans.predict(x_data)
+        y = kmeans.predict(x_data_orig)
         mistakes = x_data[y_cluster_tree != y]
         plt.scatter([x[0] for x in mistakes], [x[1] for x in mistakes], marker='x', c='red', s=60, edgecolors='black', cmap=cmap)
 
     plt.xticks([])
     plt.yticks([])
-    plt.title("Approximation Ratio: %.2f" % (cluster_tree.score(x_data) / -kmeans.score(x_data)), fontsize=14)
+    plt.title("Approximation Ratio: %.2f" % (cluster_tree.score(x_data_orig) / -kmeans.score(x_data_orig)), fontsize=14)
+    plt.savefig(os.path.join("results", title.lower().replace(" ", "_") + ".png"))
     plt.show()
     
 def plot_confusion_matrix(y_true, y_pred, classes,
@@ -252,7 +281,7 @@ def plot_df(df, dataset, step=1, ylim=None):
     plt.show()
 
 if __name__ == '__main__':
-    exkmc = ExKMCBaseline('Spectral', num_clusters=3, num_components=2)
+    exkmc = ExKMCBaseline('Spectral', num_clusters=3, num_components=3)
     exkmc.create_graph()
     exkmc.fit_base()
-    exkmc.fit_and_plot_exkmc()
+    exkmc.fit_and_plot_exkmc(exkmc.embeddings)
