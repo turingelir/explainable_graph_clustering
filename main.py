@@ -88,6 +88,28 @@ from functions import modularity_loss, min_cut_loss, clustering_regularization, 
 
 from gnn_test import train_community_detection
 from datasets import get_community_dataloader
+import networkx as nx
+from sklearn.metrics import silhouette_score
+
+
+def calculate_modularity(G, communities_dict):
+    """Calculate modularity for a graph with given community assignments"""
+    m = G.number_of_edges()
+    if m == 0:
+        return 0
+    
+    modularity = 0
+    for i in G.nodes():
+        for j in G.nodes():
+            if communities_dict[i] == communities_dict[j]:
+                actual_edge = 1 if G.has_edge(i, j) else 0
+                ki = G.degree(i)
+                kj = G.degree(j)
+                expected_edge = (ki * kj) / (2 * m)
+                modularity += actual_edge - expected_edge
+    
+    return modularity / (2 * m)
+
 
 def experiment_GNN(data, obj_func, args):
     r"""
@@ -350,7 +372,7 @@ def main(args):
 
     # Visualize performance
     if 'performance' in args['visualize']:
-        # Create V-measure, NMI metric table for all methods
+        # Create V-measure, NMI, conductance, silhouette, modularity metric table for all methods
         for dataset_name in datasets:
             # Load data
             if dataset_name == 'sim':
@@ -361,34 +383,116 @@ def main(args):
             # Create performance table
             v_measure_table = np.zeros((len(results.keys()), len(args['eval'])))
             nmi_table = np.zeros((len(results.keys()), len(args['eval'])))
+            conductance_table = np.zeros((len(results.keys()), len(args['eval'])))
+            silhouette_table = np.zeros((len(results.keys()), len(args['eval'])))
+            modularity_table = np.zeros((len(results.keys()), len(args['eval'])))
             
             # Fill tables iterating over results
             for i, method_name in enumerate(results.keys()):
                 for j, eval_name in enumerate(args['eval']):
+                    true_labels = data['initial_communities'].squeeze().argmax(dim=-1).cpu().numpy()
+                    pred_labels = results[method_name]['prediction'].squeeze().argmax(dim=-1).cpu().numpy()
+                    adj_matrix = data['adj_matrix'].squeeze().cpu().numpy()
+
                     if eval_name == 'V-measure':
-                        v_measure_table[i, j] = v_measure_score(data['initial_communities'].squeeze().argmax(dim=-1), 
-                                                                results[method_name]['prediction'].squeeze().argmax(dim=-1))
+                        v_measure_table[i, j] = v_measure_score(true_labels, pred_labels)
                     elif eval_name == 'NMI':
-                        nmi_table[i, j] = normalized_mutual_info_score(data['initial_communities'].squeeze().argmax(dim=-1), 
-                                                                results[method_name]['prediction'].squeeze().argmax(dim=-1))
+                        nmi_table[i, j] = normalized_mutual_info_score(true_labels, pred_labels)
+                    
+                    # Calculate conductance
+                    G = nx.from_numpy_array(adj_matrix)
+                    clusters = [np.where(pred_labels == i)[0] for i in range(pred_labels.max() + 1)]
+                    conductances = []
+                    for cluster in clusters:
+                        if len(cluster) == 0 or len(cluster) == G.number_of_nodes():
+                            continue
+                        cut = nx.cut_size(G, set(cluster))
+                        volume = sum(dict(G.degree(cluster)).values())
+                        remaining_volume = sum(dict(G.degree()).values()) - volume
+                        conductance = cut / min(volume, remaining_volume) if min(volume, remaining_volume) > 0 else 1
+                        conductances.append(conductance)
+                    conductance_table[i, j] = np.mean(conductances)
+
+                    # Calculate silhouette score
+                    silhouette_table[i, j] = silhouette_score(adj_matrix, pred_labels)
+
+                    # Calculate modularity
+                    G = nx.from_numpy_array(adj_matrix)
+                    communities = {i: int(c) for i, c in enumerate(pred_labels)}
+                    modularity_table[i, j] = calculate_modularity(G, communities)
+
             # Save tables to disk
             np.save(os.path.join(args['save_path'], dataset_name, 'V-measure_table.npy'), v_measure_table)
             np.save(os.path.join(args['save_path'], dataset_name, 'NMI_table.npy'), nmi_table)
-            # Create bar plots
-            fig, ax = plt.subplots(2, 1, figsize=(10, 10))
+            np.save(os.path.join(args['save_path'], dataset_name, 'conductance_table.npy'), conductance_table)
+            np.save(os.path.join(args['save_path'], dataset_name, 'silhouette_table.npy'), silhouette_table)
+            np.save(os.path.join(args['save_path'], dataset_name, 'modularity_table.npy'), modularity_table)
+
             res_names = [str(method_name[1:][0]) for method_name in results.keys()]
-            ax[0].bar(res_names, v_measure_table.mean(axis=1), yerr=v_measure_table.std(axis=1), capsize=5)
-            ax[0].set_title(dataset_name + ' V-measure')
-            ax[0].set_ylabel('V-measure')
-            ax[1].bar(res_names, nmi_table.mean(axis=1), yerr=nmi_table.std(axis=1), capsize=5)
-            ax[1].set_title(dataset_name + ' NMI')
-            ax[1].set_ylabel('NMI')
-            plt.savefig(os.path.join(args['save_path'], dataset_name, dataset_name + '_performance.png'))
+                    
+            # 1. V-measure plot
+            plt.figure(figsize=(10, 6))
+            plt.bar(res_names, v_measure_table.mean(axis=1), yerr=v_measure_table.std(axis=1), capsize=5)
+            plt.title(f'{dataset_name} V-measure')
+            plt.ylabel('V-measure')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_v_measure.png'))
             if args['show']:
                 plt.show()
+            plt.close()
+
+            # 2. NMI plot
+            plt.figure(figsize=(10, 6))
+            plt.bar(res_names, nmi_table.mean(axis=1), yerr=nmi_table.std(axis=1), capsize=5)
+            plt.title(f'{dataset_name} NMI')
+            plt.ylabel('NMI')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_nmi.png'))
+            if args['show']:
+                plt.show()
+            plt.close()
+
+            # 3. Conductance plot
+            plt.figure(figsize=(10, 6))
+            plt.bar(res_names, conductance_table.mean(axis=1), yerr=conductance_table.std(axis=1), capsize=5)
+            plt.title(f'{dataset_name} Conductance')
+            plt.ylabel('Conductance')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_conductance.png'))
+            if args['show']:
+                plt.show()
+            plt.close()
+
+            # 4. Silhouette plot
+            plt.figure(figsize=(10, 6))
+            plt.bar(res_names, silhouette_table.mean(axis=1), yerr=silhouette_table.std(axis=1), capsize=5)
+            plt.title(f'{dataset_name} Silhouette')
+            plt.ylabel('Silhouette')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_silhouette.png'))
+            if args['show']:
+                plt.show()
+            plt.close()
+
+            # 5. Modularity plot
+            plt.figure(figsize=(10, 6))
+            plt.bar(res_names, modularity_table.mean(axis=1), yerr=modularity_table.std(axis=1), capsize=5)
+            plt.title(f'{dataset_name} Modularity')
+            plt.ylabel('Modularity')
+            plt.xticks(rotation=45)
+            plt.tight_layout()
+            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_modularity.png'))
+            if args['show']:
+                plt.show()
+            plt.close()
+    
 
 
-            
+
 
 
 if __name__ == '__main__':
