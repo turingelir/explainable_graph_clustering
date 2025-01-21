@@ -139,6 +139,8 @@ def experiment_kmeans(data, args):
     res = {}
     # Data
     x = data[data['node_rep']].squeeze().detach().numpy()
+    # Drop nan values
+    x = np.nan_to_num(x)
     # K-means clustering
     kmeans = KMeans(n_clusters=data['num_communities'], random_state=0)
     kmeans.fit(x)
@@ -171,6 +173,8 @@ def experiment_exkmc(data, args):
     baseline = ExKMCBaseline(num_clusters=data['num_communities'], num_components=data['num_communities'], random_state=0)
     # Data
     x = data[data['node_rep']].squeeze().detach().numpy()
+    # Drop nan values
+    x = np.nan_to_num(x)
     # Visualize tree
     if 'visualize' in args['modes']:
         baseline.fit_and_plot_exkmc(x, title= data['dataset_name'] + ' ' + data['node_rep'] + ' ExKMC', path=folder_path)
@@ -268,7 +272,7 @@ def main(args):
     graph = generate_graph()
     
     # Datasets list 
-    datasets = ['sim']
+    datasets = args['datasets']
 
     ####        2. Experiment(s)        ####
     # Results dictionary
@@ -336,39 +340,149 @@ def main(args):
             aggr_pot = cluster_labels.sum(dim=0).unsqueeze(1) @ cluster_labels.sum(dim=0).unsqueeze(0)
             block_graph = aggr_graph / aggr_pot
             visualization.show_mat(block_graph.squeeze(), dataset_name + ' Block Model', show=args['show'], save=args['save'], 
-                                   save_path=folder_path, cmap='binary', colorbar=True)
+                                   save_path=folder_path, cmap='binary')
             
+    # Visualize predictions
+    # Replace the predictions visualization section in the main function with:
+
     # Visualize predictions
     if 'predictions' in args['visualize']:
         for dataset_name in datasets:
             # Load data
             if dataset_name == 'sim':
-                # Create graph data
                 data = graph
             else:
                 data = get_community_dataloader(dataset_name)
+                data['dataset_name'] = dataset_name
+                data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'].squeeze()).unsqueeze(0)
             
-            # Create plots for embedding and feature data separately
+            # Create directory for plots if it doesn't exist
+            plot_dir = os.path.join(args['save_path'], dataset_name, 'scatter_plots')
+            if not os.path.exists(plot_dir):
+                os.makedirs(plot_dir)
+            
+            # Plot for each type of node representation
             for node_rep in args['node_rep']:
-                # Fit PCA to data for visualization in 2D
-                pca = PCA(n_components=2)
+                # Get the data to visualize
                 x = data[node_rep].squeeze().detach().numpy()
+                # Drop nan values
+                x = np.nan_to_num(x)
+                
+                # Apply PCA for visualization
+                pca = PCA(n_components=2)
                 x_pca = pca.fit_transform(x)
-                # Scatter plot for nodes with partition labels
-                plt.scatter(x_pca[:, 0], x_pca[:, 1], c=data['initial_communities'].squeeze().argmax(dim=-1))
-                plt.title(dataset_name + ' ' + node_rep + ' Ground Truth')
-                plt.savefig(os.path.join(args['save_path'], dataset_name, dataset_name + '_' + node_rep + '_ground_truth.png'))
+                
+                # 1. Ground Truth Plot
+                plt.figure(figsize=(10, 8))
+                true_labels = data['initial_communities'].squeeze().argmax(dim=-1).numpy()
+                scatter = plt.scatter(x_pca[:, 0], x_pca[:, 1], c=true_labels, cmap='tab10')
+                plt.colorbar(scatter)
+                plt.title(f'{dataset_name} {node_rep}\nGround Truth Communities')
+                plt.xlabel('First Principal Component')
+                plt.ylabel('Second Principal Component')
+                plt.savefig(os.path.join(plot_dir, f'{dataset_name}_{node_rep}_ground_truth.png'))
                 if args['show']:
                     plt.show()
-                # Scatter plot for nodes with predictions
-                for method_name in args['methods']:
-                    if (dataset_name, method_name + '_' + node_rep) in results.keys():
-                        y_p = results[(dataset_name, method_name + '_' + node_rep)]['prediction'].squeeze().argmax(dim=-1)
-                        plt.scatter(x_pca[:, 0], x_pca[:, 1], c=y_p)
-                        plt.title(dataset_name + ' ' + node_rep + ' ' + method_name + ' Prediction')
-                        plt.savefig(os.path.join(args['save_path'], dataset_name, dataset_name + '_' + node_rep + '_' + method_name + '_prediction.png'))
+                plt.close()
+                
+                # 2. Prediction Plots
+                # First plot baseline methods
+                for method_name in args['baselines']:
+                    method_key = (dataset_name, method_name + '_' + node_rep)
+                    if method_key in results:
+                        plt.figure(figsize=(10, 8))
+                        pred_labels = results[method_key]['prediction'].squeeze().argmax(dim=-1).numpy()
+                        scatter = plt.scatter(x_pca[:, 0], x_pca[:, 1], c=pred_labels, cmap='tab10')
+                        plt.colorbar(scatter)
+                        plt.title(f'{dataset_name} {node_rep}\n{method_name} Predictions')
+                        plt.xlabel('First Principal Component')
+                        plt.ylabel('Second Principal Component')
+                        plt.savefig(os.path.join(plot_dir, f'{dataset_name}_{node_rep}_{method_name}_prediction.png'))
                         if args['show']:
                             plt.show()
+                        plt.close()
+                
+            # Now plot GNN predictions (GNN works directly with graph structure)
+            gnn_key = (dataset_name, 'GNN')
+            if gnn_key in results:
+                # For GNN predictions, we'll create scatter plots using both node representations
+                for node_rep in args['node_rep']:
+                    x = data[node_rep].squeeze().detach().numpy()
+                    # Drop nan values
+                    x = np.nan_to_num(x)
+                    x_pca = PCA(n_components=2).fit_transform(x)
+                    
+                    plt.figure(figsize=(10, 8))
+                    pred_labels = results[gnn_key]['prediction'].squeeze().argmax(dim=-1).cpu().numpy()
+                    scatter = plt.scatter(x_pca[:, 0], x_pca[:, 1], c=pred_labels, cmap='tab10')
+                    plt.colorbar(scatter)
+                    plt.title(f'{dataset_name} {node_rep}\nGNN Predictions')
+                    plt.xlabel('First Principal Component')
+                    plt.ylabel('Second Principal Component')
+                    plt.savefig(os.path.join(plot_dir, f'{dataset_name}_{node_rep}_GNN_prediction.png'))
+                    if args['show']:
+                        plt.show()
+                    plt.close()
+
+            # Optional: Create combined visualization comparing all methods
+            # This creates a grid of plots for easy comparison
+            for node_rep in args['node_rep']:
+                x = data[node_rep].squeeze().detach().numpy()
+                x_pca = PCA(n_components=2).fit_transform(x)
+                
+                # Count total number of methods (including ground truth)
+                n_methods = 1  # Start with ground truth
+                n_methods += sum(1 for m in args['baselines'] if (dataset_name, m + '_' + node_rep) in results)
+                if (dataset_name, 'GNN') in results:
+                    n_methods += 1
+                
+                # Calculate grid dimensions
+                n_rows = (n_methods + 1) // 2  # +1 for ground truth
+                n_cols = 2
+                
+                fig, axes = plt.subplots(n_rows, n_cols, figsize=(15, 5*n_rows))
+                fig.suptitle(f'{dataset_name} {node_rep} - All Methods Comparison', y=1.02)
+                axes = axes.flatten()
+                
+                # Plot ground truth
+                true_labels = data['initial_communities'].squeeze().argmax(dim=-1).numpy()
+                scatter = axes[0].scatter(x_pca[:, 0], x_pca[:, 1], c=true_labels, cmap='tab10')
+                axes[0].set_title('Ground Truth')
+                fig.colorbar(scatter, ax=axes[0])
+                
+                # Plot predictions
+                plot_idx = 1
+                
+                # Plot baseline predictions
+                for method_name in args['baselines']:
+                    method_key = (dataset_name, method_name + '_' + node_rep)
+                    if method_key in results:
+                        pred_labels = results[method_key]['prediction'].squeeze().argmax(dim=-1).numpy()
+                        scatter = axes[plot_idx].scatter(x_pca[:, 0], x_pca[:, 1], c=pred_labels, cmap='tab10')
+                        axes[plot_idx].set_title(f'{method_name}')
+                        fig.colorbar(scatter, ax=axes[plot_idx])
+                        plot_idx += 1
+                
+                # Plot GNN predictions
+                if (dataset_name, 'GNN') in results:
+                    pred_labels = results[(dataset_name, 'GNN')]['prediction'].squeeze().argmax(dim=-1).cpu().numpy()
+                    scatter = axes[plot_idx].scatter(x_pca[:, 0], x_pca[:, 1], c=pred_labels, cmap='tab10')
+                    axes[plot_idx].set_title('GNN')
+                    fig.colorbar(scatter, ax=axes[plot_idx])
+                    plot_idx += 1
+                
+                # Remove empty subplots if any
+                for idx in range(plot_idx, len(axes)):
+                    fig.delaxes(axes[idx])
+                
+                plt.tight_layout()
+                plt.savefig(os.path.join(plot_dir, f'{dataset_name}_{node_rep}_all_methods_comparison.png'))
+                if args['show']:
+                    plt.show()
+                plt.close()
+
+    # Visualize performance
+    # Replace the performance visualization section in the main function with:
 
     # Visualize performance
     if 'performance' in args['visualize']:
@@ -376,22 +490,43 @@ def main(args):
         for dataset_name in datasets:
             # Load data
             if dataset_name == 'sim':
-                # Create graph data
                 data = graph
             else:
                 data = get_community_dataloader(dataset_name)
-            # Create performance table
-            v_measure_table = np.zeros((len(results.keys()), len(args['eval'])))
-            nmi_table = np.zeros((len(results.keys()), len(args['eval'])))
-            conductance_table = np.zeros((len(results.keys()), len(args['eval'])))
-            silhouette_table = np.zeros((len(results.keys()), len(args['eval'])))
-            modularity_table = np.zeros((len(results.keys()), len(args['eval'])))
+                data['dataset_name'] = dataset_name
+                data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'].squeeze()).unsqueeze(0)
+
+            # Get all method names including both GNN and baselines
+            all_methods = []
+            # Add GNN and other non-baseline methods
+            for method in comm_det_methods:
+                if (dataset_name, method) in results:
+                    all_methods.append((dataset_name, method))
+            # Add baseline methods with node representations
+            for method in baselines:
+                for node_rep in args['node_rep']:
+                    if (dataset_name, method + '_' + node_rep) in results:
+                        all_methods.append((dataset_name, method + '_' + node_rep))
+
+            # Create performance tables
+            num_methods = len(all_methods)
+            v_measure_table = np.zeros((num_methods, len(args['eval'])))
+            nmi_table = np.zeros((num_methods, len(args['eval'])))
+            conductance_table = np.zeros((num_methods, len(args['eval'])))
+            silhouette_table = np.zeros((num_methods, len(args['eval'])))
+            modularity_table = np.zeros((num_methods, len(args['eval'])))
             
             # Fill tables iterating over results
-            for i, method_name in enumerate(results.keys()):
+            for i, method_key in enumerate(all_methods):
                 for j, eval_name in enumerate(args['eval']):
                     true_labels = data['initial_communities'].squeeze().argmax(dim=-1).cpu().numpy()
-                    pred_labels = results[method_name]['prediction'].squeeze().argmax(dim=-1).cpu().numpy()
+                    
+                    # Get predictions based on method type
+                    if method_key in results:  # For GNN and non-baseline methods
+                        pred_labels = results[method_key]['prediction'].squeeze().argmax(dim=-1).cpu().numpy()
+                    else:
+                        continue
+
                     adj_matrix = data['adj_matrix'].squeeze().cpu().numpy()
 
                     if eval_name == 'V-measure':
@@ -417,7 +552,6 @@ def main(args):
                     silhouette_table[i, j] = silhouette_score(adj_matrix, pred_labels)
 
                     # Calculate modularity
-                    G = nx.from_numpy_array(adj_matrix)
                     communities = {i: int(c) for i, c in enumerate(pred_labels)}
                     modularity_table[i, j] = calculate_modularity(G, communities)
 
@@ -428,68 +562,30 @@ def main(args):
             np.save(os.path.join(args['save_path'], dataset_name, 'silhouette_table.npy'), silhouette_table)
             np.save(os.path.join(args['save_path'], dataset_name, 'modularity_table.npy'), modularity_table)
 
-            res_names = [str(method_name[1:][0]) for method_name in results.keys()]
-                    
-            # 1. V-measure plot
-            plt.figure(figsize=(10, 6))
-            plt.bar(res_names, v_measure_table.mean(axis=1), yerr=v_measure_table.std(axis=1), capsize=5)
-            plt.title(f'{dataset_name} V-measure')
-            plt.ylabel('V-measure')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_v_measure.png'))
-            if args['show']:
-                plt.show()
-            plt.close()
+            # Get method names for plot labels
+            method_names = [method_key[1] if isinstance(method_key[1], str) else method_key[1][0] 
+                          for method_key in all_methods]
 
-            # 2. NMI plot
-            plt.figure(figsize=(10, 6))
-            plt.bar(res_names, nmi_table.mean(axis=1), yerr=nmi_table.std(axis=1), capsize=5)
-            plt.title(f'{dataset_name} NMI')
-            plt.ylabel('NMI')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_nmi.png'))
-            if args['show']:
-                plt.show()
-            plt.close()
+            # Create plots for each metric
+            metrics = {
+                'V-measure': v_measure_table,
+                'NMI': nmi_table,
+                'Conductance': conductance_table,
+                'Silhouette': silhouette_table,
+                'Modularity': modularity_table
+            }
 
-            # 3. Conductance plot
-            plt.figure(figsize=(10, 6))
-            plt.bar(res_names, conductance_table.mean(axis=1), yerr=conductance_table.std(axis=1), capsize=5)
-            plt.title(f'{dataset_name} Conductance')
-            plt.ylabel('Conductance')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_conductance.png'))
-            if args['show']:
-                plt.show()
-            plt.close()
-
-            # 4. Silhouette plot
-            plt.figure(figsize=(10, 6))
-            plt.bar(res_names, silhouette_table.mean(axis=1), yerr=silhouette_table.std(axis=1), capsize=5)
-            plt.title(f'{dataset_name} Silhouette')
-            plt.ylabel('Silhouette')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_silhouette.png'))
-            if args['show']:
-                plt.show()
-            plt.close()
-
-            # 5. Modularity plot
-            plt.figure(figsize=(10, 6))
-            plt.bar(res_names, modularity_table.mean(axis=1), yerr=modularity_table.std(axis=1), capsize=5)
-            plt.title(f'{dataset_name} Modularity')
-            plt.ylabel('Modularity')
-            plt.xticks(rotation=45)
-            plt.tight_layout()
-            plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_modularity.png'))
-            if args['show']:
-                plt.show()
-            plt.close()
-    
+            for metric_name, metric_table in metrics.items():
+                plt.figure(figsize=(12, 6))
+                plt.bar(method_names, metric_table.mean(axis=1), yerr=metric_table.std(axis=1), capsize=5)
+                plt.title(f'{dataset_name} {metric_name}')
+                plt.ylabel(metric_name)
+                plt.xticks(rotation=45)
+                plt.tight_layout()
+                plt.savefig(os.path.join(args['save_path'], dataset_name, f'{dataset_name}_{metric_name.lower()}.png'))
+                if args['show']:
+                    plt.show()
+                plt.close()
 
 
 
@@ -501,10 +597,10 @@ if __name__ == '__main__':
 
     # Take arguments
     args = {'modes': ['fit', 'eval', 'visualize', ], # 'load', 
-            'methods': ['GNN', 'K-means', 'ExKMC'], #  ; 'IterativeGreedy', 'IMM',
+            'methods': ['K-means', 'ExKMC', 'GNN'], #  ;  'IterativeGreedy', 'IMM',
             'baselines': ['K-means', 'ExKMC'], #  ; 'IMM', 
             'node_rep': ['node_embeddings', 'node_features'],
-            'datasets': ['sim'], # 'Citeseer', 'Amazon', 
+            'datasets': ['sim','amazon', 'cora','citeseer'], # ['sim', 'amazon', 'cora', 'citeseer']
             'obj_funcs': [modularity_loss], # 'min-cut' 
             'visualize': ['graphs', 'predictions', 'performance'],
             'eval': ['V-measure', 'NMI'],
@@ -513,7 +609,7 @@ if __name__ == '__main__':
             'save_path': os.path.join(os.getcwd(), 'results'),
             'show': False,
             'save': True,
-            'epochs': 100
+            'epochs': 200
             }
     assert not(args['modes'].count('fit') and args['modes'].count('load')), "Only fit or load mode can be selected at a time."
 
