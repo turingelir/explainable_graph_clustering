@@ -340,7 +340,7 @@ def main(args):
             aggr_pot = cluster_labels.sum(dim=0).unsqueeze(1) @ cluster_labels.sum(dim=0).unsqueeze(0)
             block_graph = aggr_graph / aggr_pot
             visualization.show_mat(block_graph.squeeze(), dataset_name + ' Block Model', show=args['show'], save=args['save'], 
-                                   save_path=folder_path, cmap='binary')
+                                   save_path=folder_path, cmap='binary', colorbar=True)
             
     # Visualize predictions
     # Replace the predictions visualization section in the main function with:

@@ -11,11 +11,10 @@ def show_mat(mat, title: str, show: bool = False, return_fig: bool = False, save
         plt.imshow(mat, cmap=cmap, vmin=vmin, vmax=vmax)
     else:
         plt.matshow(mat, cmap=cmap, vmin=vmin, vmax=vmax)  # or plt.imshow ?
-    pos = plt.pcolormesh(mat, cmap=cmap, vmin=vmin, vmax=vmax)
-    plt.title(title)
-    plt.colorbar(pos, shrink=0.3).minorticks_on()
+    plt.title(title)     
     if colorbar:
-        plt.colorbar()
+        pos = plt.pcolormesh(mat, cmap=cmap, vmin=vmin, vmax=vmax)
+        plt.colorbar(pos, shrink=0.3).minorticks_on()
     plt.axis('off')
     if tight_layout:
         plt.tight_layout()
