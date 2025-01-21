@@ -587,6 +587,8 @@ def main(args):
                 if args['show']:
                     plt.show()
                 plt.close()
+    
+    print("Experiment finished.")
 
 
 
