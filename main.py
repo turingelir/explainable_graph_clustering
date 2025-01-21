@@ -285,7 +285,7 @@ def main(args):
             data = graph
         else:
             data = get_community_dataloader(dataset_name)
-            # Add dataset name to data
+        # Add dataset name to data
         data['dataset_name'] = dataset_name
 
         # Baseline methods only work on sample x features data
@@ -353,8 +353,10 @@ def main(args):
                 data = graph
             else:
                 data = get_community_dataloader(dataset_name)
-                data['dataset_name'] = dataset_name
-                data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'].squeeze()).unsqueeze(0)
+            # Extract node embeddings using SpectralEncoder
+            encoder = SpectralEncoder(data['num_communities'], norm_laplacian=True)
+            data['dataset_name'] = dataset_name
+            data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'].squeeze()).unsqueeze(0)
             
             # Create directory for plots if it doesn't exist
             plot_dir = os.path.join(args['save_path'], dataset_name, 'scatter_plots')
@@ -494,8 +496,10 @@ def main(args):
                 data = graph
             else:
                 data = get_community_dataloader(dataset_name)
-                data['dataset_name'] = dataset_name
-                data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'].squeeze()).unsqueeze(0)
+            # Extract node embeddings using SpectralEncoder
+            encoder = SpectralEncoder(data['num_communities'], norm_laplacian=True)
+            data['dataset_name'] = dataset_name
+            data['node_embeddings'] = encoder.fit_transform(data['adj_matrix'].squeeze()).unsqueeze(0)
 
             # Get all method names including both GNN and baselines
             all_methods = []
@@ -600,10 +604,10 @@ if __name__ == '__main__':
 
     # Take arguments
     args = {'modes': ['fit', 'eval', 'visualize', ], # 'load', 
-            'methods': ['K-means', 'ExKMC', 'GNN'], #  ;  'IterativeGreedy', 'IMM',
-            'baselines': ['K-means', 'ExKMC'], #  ; 'IMM', 
+            'methods': [], #  'K-means', 'ExKMC', 'GNN';  'IterativeGreedy', 'IMM',
+            'baselines': [], #  'K-means', 'ExKMC'; 'IMM', 
             'node_rep': ['node_embeddings', 'node_features'],
-            'datasets': ['sim','amazon', 'cora','citeseer'], # ['sim', 'amazon', 'cora', 'citeseer']
+            'datasets': ['sim',], # ['sim', 'amazon', 'cora', 'citeseer']
             'obj_funcs': [modularity_loss], # 'min-cut' 
             'visualize': ['graphs', 'predictions', 'performance'],
             'eval': ['V-measure', 'NMI'],
