@@ -428,6 +428,7 @@ def main(args):
             # This creates a grid of plots for easy comparison
             for node_rep in args['node_rep']:
                 x = data[node_rep].squeeze().detach().numpy()
+                x = np.nan_to_num(x)
                 x_pca = PCA(n_components=2).fit_transform(x)
                 
                 # Count total number of methods (including ground truth)
